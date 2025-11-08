@@ -23,5 +23,11 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go }}
-    - run: go test -cover
-    - run: go build -buildmode=c-shared -o pam_ussh.so
+    - name: Test and Build
+      run: make
+    - name: Build Deb Package
+      uses: jtdor/build-deb-action@v1
+      env:
+        DEB_BUILD_OPTIONS: noautodbgsym
+      with:
+        buildpackage-opts: --build=binary --no-sign
