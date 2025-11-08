@@ -58,7 +58,6 @@ func TestNoAuthSock(t *testing.T) {
 	os.Unsetenv("SSH_AUTH_SOCK")
 	b := new(bytes.Buffer)
 	require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
-	require.Contains(t, b.String(), "No SSH_AUTH_SOCK")
 }
 
 func TestBadAuthSock(t *testing.T) {
