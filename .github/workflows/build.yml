@@ -28,6 +28,7 @@ jobs:
   deb:
     runs-on: unbuntu-latest
     steps:
+    - uses: actions/checkout@v5
     - uses: jtdor/build-deb-action@v1
       env:
         DEB_BUILD_OPTIONS: noautodbgsym
