@@ -2,26 +2,26 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
 
   build:
     runs-on: ubuntu-latest
-    env:
-      GO111MODULE: auto
+    strategy:
+      matrix:
+        go: [ '1.24', '1.25' ]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v5
 
     - name: Install required packages
       run: sudo apt-get install -y libpam0g-dev
       
     - name: Set up Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v6
       with:
-        go-version: 1.17
-
-    - name: Build & Test
-      run: make
+        go-version: ${{ matrix.go }}
+    - run: go test -cover
+    - run: go build -buildmode=c-shared -o pam_ussh.so
