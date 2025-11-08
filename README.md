@@ -20,20 +20,16 @@ Building:
 
 1. clone the repo and run 'make'
 ```
-  $ git clone github.com/uber/pam-ussh
+  $ git clone github.com/andrewheberle/pam-ussh
 
   ...
 
   $ make
-  mkdir -p /home/pmoody/tmp/pam-ussh/.go/src
-  GOPATH=/home/pmoody/tmp/pam-ussh/.go go get golang.org/x/crypto/ssh
-  GOPATH=/home/pmoody/tmp/pam-ussh/.go go get golang.org/x/crypto/ssh/agent
-  GOPATH=/home/pmoody/tmp/pam-ussh/.go go get github.com/stretchr/testify/require
-  GOPATH=/home/pmoody/tmp/pam-ussh/.go go test -cover
+  go test -cover
   PASS
   coverage: 71.8% of statements
   ok  	_/home/pmoody/tmp/pam-ussh	0.205s
-  GOPATH=/home/pmoody/tmp/pam-ussh/.go go build -buildmode=c-shared -o pam_ussh.so
+  go build -buildmode=c-shared -o pam_ussh.so
 
   $
 ```
