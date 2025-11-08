@@ -1,4 +1,6 @@
-Uber's SSH certificate pam module.
+# pam-ussh
+
+This is a fork of Uber's SSH certificate pam module.
 
 This is a pam module that will authenticate a user based on them having an ssh certificate in
 their ssh-agent signed by a specified ssh CA. 
