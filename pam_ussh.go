@@ -1,3 +1,4 @@
+//go:build darwin || linux
 // +build darwin linux
 
 /*
@@ -75,7 +76,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
-		fmt.Fprint(w, "No SSH_AUTH_SOCK")
+		pamLog("No SSH_AUTH_SOCK")
 		return AuthError
 	}
 
@@ -160,7 +161,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		if !ok {
 			continue
 		}
-		
+
 		certValidFor := ""
 		// Optionally, we may require that the cert be valid for a
 		// required_principal, typically the local username
@@ -185,7 +186,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 				continue
 			}
 		}
-		
+
 		if !c.IsUserAuthority(cert.SignatureKey) {
 			pamLog("certificate signed by unrecognized authority")
 			continue
@@ -277,7 +278,7 @@ func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthR
 			pamLog("unkown option: %s\n", opt[0])
 		}
 	}
-	
+
 	if len(group) == 0 || isMemberOf(group) {
 		return authenticate(w, uid, required_principal, userCA, authorizedPrincipals)
 	}
