@@ -50,7 +50,7 @@ Usage:
 3. make sure your SSH_AUTH_SOCK is available where you want to use this (eg. ssh -A user@host)
 
 Runtime configuration options:
-* `ca_file` - string, the path to your TrustedUserCAKeys file, default `/etc/ssh/trusted_user_ca`.
+* `ca_file` - string, the path to your TrustedUserCAKeys file, default `/etc/ssh/ca.pub`.
   This is the pubkey that signs your user certificates.
 
 * `authorized_principals` - string, comma separated list of authorized principals, default `""`.
@@ -72,7 +72,7 @@ Example configuration:
 
 1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `user_ca`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/root_authorized_principals`.
    ```
-   auth [success=1 default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/user_ca authorized_principals_file=/etc/ssh/root_authorized_principals
+   auth [success=1 default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/user_ca authorized_principals_file=/etc/ssh/root_authorized_principals no_require_user_principal
    ```
 
 1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `user_ca`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/root_authorized_principals`. The certificate must also be valid for a principal matching the username of the target user.
