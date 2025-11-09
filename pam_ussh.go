@@ -31,7 +31,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log/syslog"
 	"net"
 	"os"
@@ -119,7 +118,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		return AuthError
 	}
 
-	caBytes, err := ioutil.ReadFile(ca)
+	caBytes, err := os.ReadFile(ca)
 	if err != nil {
 		pamLog("error reading ca: %v\n", err)
 		return AuthError
@@ -219,7 +218,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 
 		for _, p := range cert.ValidPrincipals {
 			if _, ok := principals[p]; ok {
-				pamLog("Authentication succeded for %s. Matched principal %s, cert %d",
+				pamLog("Authentication succeeded for %s. Matched principal %s, cert %d",
 					cert.ValidPrincipals[0], p, cert.Serial)
 				return AuthSuccess
 			}
@@ -275,7 +274,7 @@ func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthR
 		case "no_require_user_principal":
 			required_principal = ""
 		default:
-			pamLog("unkown option: %s\n", opt[0])
+			pamLog("unknown option: %s\n", opt[0])
 		}
 	}
 
