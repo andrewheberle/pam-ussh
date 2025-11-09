@@ -4,7 +4,7 @@ module: test
 	go build -buildmode=c-shared -o ${MODULE}.so
 
 test: *.go
-	go test -cover
+	go test -coverprofile=coverage.txt
 
 clean:
 	go clean

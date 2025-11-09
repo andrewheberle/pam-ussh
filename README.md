@@ -1,5 +1,8 @@
 # pam-ussh
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/andrewheberle/pam-ussh?logo=go&style=flat-square)](https://goreportcard.com/report/github.com/andrewheberle/pam-ussh)
+[![codecov](https://codecov.io/gh/andrewheberle/pam-ussh/graph/badge.svg?token=MNFPOWU3VV)](https://codecov.io/gh/andrewheberle/pam-ussh)
+
 This is a fork of Uber's SSH certificate pam module.
 
 This is a pam module that will authenticate a user based on them having an ssh certificate in
