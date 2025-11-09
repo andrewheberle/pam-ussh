@@ -28,7 +28,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path"
@@ -43,7 +42,7 @@ import (
 func TestLoadPrincipals(t *testing.T) {
 	WithTempDir(func(dir string) {
 		p := path.Join(dir, "principals")
-		e := ioutil.WriteFile(p, []byte("group:t"), 0444)
+		e := os.WriteFile(p, []byte("group:t"), 0444)
 		require.NoError(t, e)
 
 		r, e := loadValidPrincipals(p)
@@ -95,7 +94,8 @@ func TestAuthorize_NoKeys(t *testing.T) {
 		require.NoError(t, e)
 		pub, e := ssh.NewPublicKey(&k.PublicKey)
 		require.NoError(t, e)
-		e = ioutil.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444)
+		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444)
+		require.NoError(t, e)
 
 		WithSSHAgent(func(a agent.Agent) {
 			r := authenticate(new(bytes.Buffer), 0, "", ca, p)
@@ -114,7 +114,8 @@ func TestPamAuthorize(t *testing.T) {
 		require.NoError(t, e)
 		signer, e := ssh.NewSignerFromKey(k)
 		require.NoError(t, e)
-		e = ioutil.WriteFile(ca, ssh.MarshalAuthorizedKey(signer.PublicKey()), 0444)
+		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(signer.PublicKey()), 0444)
+		require.NoError(t, e)
 
 		userPriv, e := rsa.GenerateKey(rand.Reader, 1024)
 		require.NoError(t, e)
@@ -122,7 +123,7 @@ func TestPamAuthorize(t *testing.T) {
 		require.NoError(t, e)
 		c := signedCert(userPub, signer, "foober", []string{"group:foober"})
 
-		e = ioutil.WriteFile(principals, []byte("group:foober"), 0444)
+		e = os.WriteFile(principals, []byte("group:foober"), 0444)
 		require.NoError(t, e)
 
 		WithSSHAgent(func(a agent.Agent) {
@@ -198,7 +199,7 @@ func signedCert(pubKey ssh.PublicKey, signer ssh.Signer, u string, p []string) *
 // WithTempDir runs the func `fn` with the given temporary directory.
 // 'Borrowed' from cerberus.
 func WithTempDir(fn func(dir string)) {
-	dir, err := ioutil.TempDir("", "ussh-test")
+	dir, err := os.MkdirTemp("", "ussh-test")
 	if err != nil {
 		panic(err)
 	}
@@ -255,7 +256,8 @@ func TestWithWrongCA(t *testing.T) {
 		require.NoError(t, e)
 		correctCAPub, e := ssh.NewPublicKey(&correctCAKey.PublicKey)
 		require.NoError(t, e)
-		e = ioutil.WriteFile(ca, ssh.MarshalAuthorizedKey(correctCAPub), 0444)
+		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(correctCAPub), 0444)
+		require.NoError(t, e)
 
 		// The wrong CA is just used for signing the certificate
 		wrongCAKey, e := rsa.GenerateKey(rand.Reader, 1024)
