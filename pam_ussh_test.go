@@ -118,7 +118,7 @@ func TestParseArgs(t *testing.T) {
 		{"defaults", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
 		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, defaultGroup, "testuser", "/etc/ssh_ca.pub", map[string]struct{}{}},
 		{"alternate group", "testuser", []string{"group=testgroup"}, false, "testgroup", "testuser", defaultUserCA, map[string]struct{}{}},
-		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, "testgroup", "", defaultUserCA, map[string]struct{}{}},
+		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, defaultGroup, "", defaultUserCA, map[string]struct{}{}},
 	}
 
 	for _, tt := range tests {
