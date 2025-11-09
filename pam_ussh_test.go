@@ -104,6 +104,34 @@ func TestAuthorize_NoKeys(t *testing.T) {
 	})
 }
 
+func TestParseArgs(t *testing.T) {
+	tests := []struct {
+		name                     string
+		username                 string
+		args                     []string
+		wantErr                  bool
+		wantGroup                string
+		wantRequiredPrincipal    string
+		wantUserCA               string
+		wantAuthorizedPrincipals map[string]struct{}
+	}{
+		{"no args", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}},
+	}
+
+	for _, tt := range tests {
+		group, required_principal, userCA, authorizedPrincipals, err := parseArgs(tt.username, tt.args)
+		if tt.wantErr {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, tt.wantGroup, group)
+			require.Equal(t, tt.wantRequiredPrincipal, required_principal)
+			require.Equal(t, tt.wantUserCA, userCA)
+			require.Equal(t, tt.wantAuthorizedPrincipals, authorizedPrincipals)
+		}
+	}
+}
+
 func TestPamAuthorize(t *testing.T) {
 	WithTempDir(func(dir string) {
 		ca := path.Join(dir, "ca")
