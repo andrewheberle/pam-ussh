@@ -1,3 +1,10 @@
+pam-ussh (1.1.0) all; urgency=low
+
+  * change default trusted use CA file
+  * add no_require_user_principal option
+
+ -- Andrew Heberle <andrew.heberle@gmail.com>  Sun, 9 Nov 2025 13:32:00 +0800
+
 pam-ussh (1.0.1) all; urgency=low
 
   * fix security issue reported by Solar Designer.
