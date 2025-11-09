@@ -115,7 +115,7 @@ func TestParseArgs(t *testing.T) {
 		wantUserCA               string
 		wantAuthorizedPrincipals map[string]struct{}
 	}{
-		{"no args", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}},
+		{"no args", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
 	}
 
 	for _, tt := range tests {
