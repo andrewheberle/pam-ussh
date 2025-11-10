@@ -11,6 +11,8 @@ override_dh_auto_build:
 	GOOS=linux \
 	GOARCH=$(DEB_HOST_GOARCH) \
 	CC=$(DEB_HOST_GNU_TYPE)-gcc \
-	go build -o pam_ussh.so
+	CGO_CFLAGS="" \
+	CGO_LDFLAGS="" \
+	go build -buildmode=c-shared -o pam_ussh.so
 
 override_dh_usrlocal:
