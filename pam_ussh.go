@@ -29,6 +29,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"log/syslog"
@@ -243,13 +244,11 @@ func loadValidPrincipals(principals string) (map[string]struct{}, error) {
 	return p, nil
 }
 
-func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthResult {
-	runtime.GOMAXPROCS(1)
-
-	userCA := defaultUserCA
-	group := defaultGroup
-	authorizedPrincipals := make(map[string]struct{})
-	required_principal := username
+func parseArgs(username string, argv []string) (group, required_principal, userCA string, authorizedPrincipals map[string]struct{}, err error) {
+	userCA = defaultUserCA
+	group = defaultGroup
+	authorizedPrincipals = make(map[string]struct{})
+	required_principal = username
 
 	for _, arg := range argv {
 		opt := strings.Split(arg, "=")
@@ -268,7 +267,7 @@ func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthR
 			ap, err := loadValidPrincipals(opt[1])
 			if err != nil {
 				pamLog("%v", err)
-				return AuthError
+				return "", "", "", nil, errors.New("could not load authorized_principals_file")
 			}
 			authorizedPrincipals = ap
 		case "no_require_user_principal":
@@ -276,6 +275,18 @@ func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthR
 		default:
 			pamLog("unknown option: %s\n", opt[0])
 		}
+	}
+
+	return group, required_principal, userCA, authorizedPrincipals, nil
+}
+
+func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthResult {
+	runtime.GOMAXPROCS(1)
+
+	// parse args
+	group, required_principal, userCA, authorizedPrincipals, err := parseArgs(username, argv)
+	if err != nil {
+		return AuthError
 	}
 
 	if len(group) == 0 || isMemberOf(group) {
