@@ -45,7 +45,6 @@ import (
 
 var (
 	defaultUserCA = "/etc/ssh/ca.pub"
-	defaultGroup  = ""
 )
 
 // AuthResult is the result of the authentcate function.
@@ -244,9 +243,8 @@ func loadValidPrincipals(principals string) (map[string]struct{}, error) {
 	return p, nil
 }
 
-func parseArgs(username string, argv []string) (group, required_principal, userCA string, authorizedPrincipals map[string]struct{}, err error) {
+func parseArgs(username string, argv []string) (required_principal, userCA string, authorizedPrincipals map[string]struct{}, err error) {
 	userCA = defaultUserCA
-	group = defaultGroup
 	authorizedPrincipals = make(map[string]struct{})
 	required_principal = username
 
@@ -257,8 +255,7 @@ func parseArgs(username string, argv []string) (group, required_principal, userC
 			userCA = opt[1]
 			pamLog("ca_file set to %s", userCA)
 		case "group":
-			group = opt[1]
-			pamLog("group set to %s", group)
+			pamLog("the group option is deprecated and is ignored")
 		case "authorized_principals":
 			for _, s := range strings.Split(opt[1], ",") {
 				authorizedPrincipals[s] = struct{}{}
@@ -267,7 +264,7 @@ func parseArgs(username string, argv []string) (group, required_principal, userC
 			ap, err := loadValidPrincipals(opt[1])
 			if err != nil {
 				pamLog("%v", err)
-				return "", "", "", nil, errors.New("could not load authorized_principals_file")
+				return "", "", nil, errors.New("could not load authorized_principals_file")
 			}
 			authorizedPrincipals = ap
 		case "no_require_user_principal":
@@ -277,23 +274,19 @@ func parseArgs(username string, argv []string) (group, required_principal, userC
 		}
 	}
 
-	return group, required_principal, userCA, authorizedPrincipals, nil
+	return required_principal, userCA, authorizedPrincipals, nil
 }
 
 func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthResult {
 	runtime.GOMAXPROCS(1)
 
 	// parse args
-	group, required_principal, userCA, authorizedPrincipals, err := parseArgs(username, argv)
+	required_principal, userCA, authorizedPrincipals, err := parseArgs(username, argv)
 	if err != nil {
 		return AuthError
 	}
 
-	if len(group) == 0 || isMemberOf(group) {
-		return authenticate(w, uid, required_principal, userCA, authorizedPrincipals)
-	}
-
-	return AuthSuccess
+	return authenticate(w, uid, required_principal, userCA, authorizedPrincipals)
 }
 
 func main() {}
