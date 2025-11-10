@@ -5,43 +5,36 @@
 
 This is a fork of Uber's SSH certificate pam module.
 
-This is a pam module that will authenticate a user based on them having an ssh certificate in
-their ssh-agent signed by a specified ssh CA. 
+This is a PAM module that will authenticate a user based on them having an SSH certificate in
+their ssh-agent signed by a specified SSH CA. 
 
 This is primarily intended as an authentication module for sudo. Using it for something else 
-may be unsafe (we haven't tested it anyway). We'd be happy to learn of other potential uses though.
+may be unsafe and is totally untested.
 
-An example usage would be you ssh to a remote machine and sshd authenticates you (probably 
-using your ssh cert, because if you're using it for this, you're probably using it for sshd 
+An example usage would be you SSH to a remote machine and sshd authenticates you (probably 
+using your SSH certificate, because if you're using it for this, you're probably using it for sshd 
 as well). At that point when you want to run a command that requires authentication (eg. 
 `sudo`), you can use pam-ussh for authentication.
 
-Works on linux and osx. BSD doesn't work because go doesn't (yet) support `buildmode=c-shared`
-on bsd.
+Works on Linux and OSX. BSD doesn't work because Go doesn't (yet) support `buildmode=c-shared`
+on BSD.
 
-Building:
+## Building
 
-1. clone the repo and run 'make'
-```
-  $ git clone github.com/andrewheberle/pam-ussh
-
-  ...
-
-  $ make
-  go test -cover
-  PASS
-  coverage: 71.8% of statements
-  ok  	_/home/pmoody/tmp/pam-ussh	0.205s
-  go build -buildmode=c-shared -o pam_ussh.so
-
-  $
+1. Clone the repo and run 'make'
+```sh
+  git clone https://github.com/andrewheberle/pam-ussh.git
+  cd pam-ussh
+  make
 ```
 
-Usage:
+## Usage
 
-1. put this pam module where ever pam modules live on your system, eg. `/lib/security`
+1. Put this PAM module where ever PAM modules live on your system, eg.
+`/lib/security`
 
-2. add it as an authentication method, using `/etc/pam.d/sudo` from Ubuntu 24.04 LTS, eg.
+2. Add it as an authentication method to `/etc/pam.d/sudo` (this example is
+from Ubuntu 24.04 LTS), eg.
 
 ```
   $ cat /etc/pam.d/sudo
@@ -61,7 +54,7 @@ Usage:
   @include common-session-noninteractive
 ```
 
-3. make sure your SSH_AUTH_SOCK is available where you want to use this (eg. ssh -A user@host)
+3. Make sure your `SSH_AUTH_SOCK` is available where you want to use this (eg. ssh -A user@host)
 
 Runtime configuration options:
 * `ca_file` - string, the path to your TrustedUserCAKeys file, default `/etc/ssh/ca.pub`.
@@ -79,20 +72,23 @@ Runtime configuration options:
   If set, certificates do not have to be valid for a principal matching the local user in addition
   to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
 
-Example configuration:
+## Example configuration
 
-1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
+1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.
+The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
    ```
    auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals no_require_user_principal
    ```
 
-1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`. The certificate must also be valid for a principal matching the username of the target user.
+2. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.
+The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
+The certificate must also be valid for a principal matching the username of the target user.
 
    ```
    auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals
    ```
 
-FAQ:
+## FAQ
 
 * Are you associated with Uber?
   - No, I have no association with Uber
