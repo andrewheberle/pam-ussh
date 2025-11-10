@@ -1,3 +1,9 @@
+pam-ussh (1.2.0) all; urgency=low
+
+  * remove group option
+
+ -- Andrew Heberle <andrew.heberle@gmail.com>  Mon, 10 Nov 2025 9:16:00 +0800
+
 pam-ussh (1.1.0) all; urgency=low
 
   * change default trusted use CA file
