@@ -110,27 +110,25 @@ func TestParseArgs(t *testing.T) {
 		username                 string
 		args                     []string
 		wantErr                  bool
-		wantGroup                string
 		wantRequiredPrincipal    string
 		wantUserCA               string
 		wantAuthorizedPrincipals map[string]struct{}
 	}{
-		{"defaults", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
-		{"defaults with unknown option", "testuser", []string{"some_unknown_setting"}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
-		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, defaultGroup, "testuser", "/etc/ssh_ca.pub", map[string]struct{}{}},
-		{"alternate group", "testuser", []string{"group=testgroup"}, false, "testgroup", "testuser", defaultUserCA, map[string]struct{}{}},
-		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, defaultGroup, "", defaultUserCA, map[string]struct{}{}},
-		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin1,admin2,admin3"}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{"admin1": {}, "admin2": {}, "admin3": {}}},
-		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, defaultGroup, "", defaultUserCA, map[string]struct{}{}},
+		{"defaults", "testuser", []string{}, false, "testuser", defaultUserCA, map[string]struct{}{}},
+		{"defaults with unknown option", "testuser", []string{"some_unknown_setting"}, false, "testuser", defaultUserCA, map[string]struct{}{}},
+		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, "testuser", "/etc/ssh_ca.pub", map[string]struct{}{}},
+		{"alternate group", "testuser", []string{"group=testgroup"}, false, "testuser", defaultUserCA, map[string]struct{}{}},
+		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, "", defaultUserCA, map[string]struct{}{}},
+		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin1,admin2,admin3"}, false, "testuser", defaultUserCA, map[string]struct{}{"admin1": {}, "admin2": {}, "admin3": {}}},
+		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, "", defaultUserCA, map[string]struct{}{}},
 	}
 
 	for _, tt := range tests {
-		group, required_principal, userCA, authorizedPrincipals, err := parseArgs(tt.username, tt.args)
+		required_principal, userCA, authorizedPrincipals, err := parseArgs(tt.username, tt.args)
 		if tt.wantErr {
 			require.Error(t, err, tt.name)
 		} else {
 			require.NoError(t, err, tt.name)
-			require.Equal(t, tt.wantGroup, group, tt.name)
 			require.Equal(t, tt.wantRequiredPrincipal, required_principal, tt.name)
 			require.Equal(t, tt.wantUserCA, userCA, tt.name)
 			require.Equal(t, tt.wantAuthorizedPrincipals, authorizedPrincipals, tt.name)

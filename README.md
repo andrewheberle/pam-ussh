@@ -75,9 +75,6 @@ Runtime configuration options:
   If set, users need to have a principal listed in this file in order to use this module.
   If this and `authorized_principals` are both set, only the last option listed is checked.
 
-* `group` - string, default, `""`
-  If set, the user needs to be a member of this group in order to use this module.
-
 * `no_require_user_principal` - flag, true if present
   If set, certificates do not have to be valid for a principal matching the local user in addition
   to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
