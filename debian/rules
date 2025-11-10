@@ -1,7 +1,13 @@
 #!/usr/bin/make -f
 
 export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-export DEB_HOST_GOARCH    ?= $(shell dpkg-architecture -qDEB_HOST_GOARCH)
+export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+ifeq ($(DEB_HOST_ARCH),amd64)
+    GOARCH := amd64
+else ifeq ($(DEB_HOST_ARCH),arm64)
+    GOARCH := arm64
+endif
 
 %:
 	dh $@
@@ -9,7 +15,7 @@ export DEB_HOST_GOARCH    ?= $(shell dpkg-architecture -qDEB_HOST_GOARCH)
 override_dh_auto_build:
 	CGO_ENABLED=1 \
 	GOOS=linux \
-	GOARCH=$(DEB_HOST_GOARCH) \
+	GOARCH=$(GOARCH) \
 	CC=$(DEB_HOST_GNU_TYPE)-gcc \
 	CGO_CFLAGS="" \
 	CGO_LDFLAGS="" \
