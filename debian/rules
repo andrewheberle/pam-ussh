@@ -1,6 +1,16 @@
 #!/usr/bin/make -f
 
+export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+export DEB_HOST_GOARCH    ?= $(shell dpkg-architecture -qDEB_HOST_GOARCH)
+
 %:
 	dh $@
+
+override_dh_auto_build:
+	CGO_ENABLED=1 \
+	GOOS=linux \
+	GOARCH=$(DEB_HOST_GOARCH) \
+	CC=$(DEB_HOST_GNU_TYPE)-gcc \
+	go build -o pam_ussh.so
 
 override_dh_usrlocal:
