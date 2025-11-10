@@ -41,13 +41,24 @@ Usage:
 
 1. put this pam module where ever pam modules live on your system, eg. `/lib/security`
 
-2. add it as an authentication method, eg.
+2. add it as an authentication method, using `/etc/pam.d/sudo` from Ubuntu 24.04 LTS, eg.
 
 ```
-  $ grep auth /etc/pam.d/sudo
-  auth [success=1 default=ignore] /lib/security/pam_ussh.so
-  auth requisite                  pam_deny.so
-  auth required                   pam_permit.so
+  $ cat /etc/pam.d/sudo
+  #%PAM-1.0
+
+  # Set up user limits from /etc/security/limits.conf.
+  session    required   pam_limits.so
+
+  session    required   pam_env.so readenv=1 user_readenv=0
+  session    required   pam_env.so readenv=1 envfile=/etc/default/locale user_readenv=0
+
+  # attempt SSH certificate based auth for sudo access
+  auth [success=done default=ignore] /lib/security/pam_ussh.so
+
+  @include common-auth
+  @include common-account
+  @include common-session-noninteractive
 ```
 
 3. make sure your SSH_AUTH_SOCK is available where you want to use this (eg. ssh -A user@host)
@@ -73,31 +84,27 @@ Runtime configuration options:
 
 Example configuration:
 
-1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `user_ca`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/root_authorized_principals`.
+1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
    ```
-   auth [success=1 default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/user_ca authorized_principals_file=/etc/ssh/root_authorized_principals no_require_user_principal
+   auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals no_require_user_principal
    ```
 
-1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `user_ca`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/root_authorized_principals`. The certificate must also be valid for a principal matching the username of the target user.
+1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`. The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`. The certificate must also be valid for a principal matching the username of the target user.
 
    ```
-   auth [success=1 default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/user_ca authorized_principals_file=/etc/ssh/root_authorized_principals
+   auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals
    ```
 
 FAQ:
 
+* Are you associated with Uber?
+  - No, I have no association with Uber
+
 * How do I report a security issue?
-  - Please report security issues at the [hackerone bug bounty page](https://hackerone.com/uber) and the bugbounty folks will determine bounty eligibility
+  - Please report security issues privately via GitHub
 
 * does this work with non-certificate ssh-keys?
-  - No, not at the moment. 
-  - There's no reason it can't though, we just didn't need it to do that so I never added the functionality
-
-* why aren't you using $DEP_SYSTEM?
-  - We didn't need to so we didn't bother
-
-* can you make it do $X?
-  - Submit a feature request, or better yet a pull request
+  - I have no plans to support non-certificate based ssh-keys
 
 
 Information on ssh certificates:
