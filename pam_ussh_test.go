@@ -116,9 +116,12 @@ func TestParseArgs(t *testing.T) {
 		wantAuthorizedPrincipals map[string]struct{}
 	}{
 		{"defaults", "testuser", []string{}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
+		{"defaults with unknown option", "testuser", []string{"some_unknown_setting"}, false, defaultGroup, "testuser", defaultUserCA, map[string]struct{}{}},
 		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, defaultGroup, "testuser", "/etc/ssh_ca.pub", map[string]struct{}{}},
 		{"alternate group", "testuser", []string{"group=testgroup"}, false, "testgroup", "testuser", defaultUserCA, map[string]struct{}{}},
 		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, defaultGroup, "", defaultUserCA, map[string]struct{}{}},
+		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin1,admin2,admin3"}, false, defaultGroup, "", defaultUserCA, map[string]struct{}{"admin1": {}, "admin2": {}, "admin3": {}}},
+		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, defaultGroup, "", defaultUserCA, map[string]struct{}{}},
 	}
 
 	for _, tt := range tests {
