@@ -75,7 +75,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
-		pamLog("No SSH_AUTH_SOCK")
+		pamLog("no SSH_AUTH_SOCK")
 		return AuthError
 	}
 
@@ -96,7 +96,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 
 	agentSock, err := net.Dial("unix", authSock)
 	if err != nil {
-		fmt.Fprintf(w, "error connecting to %s: %v\n", authSock, err)
+		fmt.Fprintf(w, "error connecting to %s: %v", authSock, err)
 		// if we're here, we probably can't stat the socket to get the owner uid
 		// to decorate the logs, but we might be able to read the parent directory.
 		ownerUID := ownerUID(path.Dir(authSock))
@@ -114,13 +114,13 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 	}
 
 	if len(keys) == 0 {
-		pamLog("No certs loaded.\n")
+		pamLog("no certs loaded")
 		return AuthError
 	}
 
 	caBytes, err := os.ReadFile(ca)
 	if err != nil {
-		pamLog("error reading ca: %v\n", err)
+		pamLog("error reading ca: %v", err)
 		return AuthError
 	}
 
@@ -195,31 +195,31 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		// have the private key
 		randBytes := make([]byte, 32)
 		if _, err := rand.Read(randBytes); err != nil {
-			pamLog("Error grabbing random bytes: %v\n", err)
+			pamLog("error grabbing random bytes: %v", err)
 			return AuthError
 		}
 
 		signedData, err := a.Sign(pubKey, randBytes)
 		if err != nil {
-			pamLog("error signing data: %v\n", err)
+			pamLog("error signing data: %v", err)
 			return AuthError
 		}
 
 		if err := pubKey.Verify(randBytes, signedData); err != nil {
-			pamLog("signature verification failed: %v\n", err)
+			pamLog("signature verification failed: %v", err)
 			return AuthError
 		}
 
 		if len(principals) == 0 {
-			pamLog("Authentication succeeded for %q (cert %q, %d)",
+			pamLog("authentication succeeded for %q (cert %q, %d)",
 				certValidFor, cert.KeyId, cert.Serial)
 			return AuthSuccess
 		}
 
 		for _, p := range cert.ValidPrincipals {
 			if _, ok := principals[p]; ok {
-				pamLog("Authentication succeeded for %s. Matched principal %s, cert %d",
-					cert.ValidPrincipals[0], p, cert.Serial)
+				pamLog("authentication succeeded for %q. Matched principal %q (cert %q, %d)",
+					cert.ValidPrincipals[0], p, cert.KeyId, cert.Serial)
 				return AuthSuccess
 			}
 		}
@@ -270,7 +270,7 @@ func parseArgs(username string, argv []string) (required_principal, userCA strin
 		case "no_require_user_principal":
 			required_principal = ""
 		default:
-			pamLog("unknown option: %s\n", opt[0])
+			pamLog("unknown option: %s", opt[0])
 		}
 	}
 
