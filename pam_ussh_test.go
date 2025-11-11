@@ -24,7 +24,6 @@ THE SOFTWARE.
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -56,8 +55,7 @@ func TestNoAuthSock(t *testing.T) {
 	oldAgent := os.Getenv("SSH_AUTH_SOCK")
 	defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
 	os.Unsetenv("SSH_AUTH_SOCK")
-	b := new(bytes.Buffer)
-	require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
+	require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 }
 
 func TestBadAuthSock(t *testing.T) {
@@ -67,8 +65,7 @@ func TestBadAuthSock(t *testing.T) {
 		oldAgent := os.Getenv("SSH_AUTH_SOCK")
 		defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
 		os.Setenv("SSH_AUTH_SOCK", s)
-		b := new(bytes.Buffer)
-		require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
+		require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 	})
 }
 
@@ -79,7 +76,7 @@ func TestBadCA(t *testing.T) {
 			k, e := rsa.GenerateKey(rand.Reader, 1024)
 			require.NoError(t, e)
 			require.NoError(t, a.Add(agent.AddedKey{PrivateKey: k}))
-			require.Equal(t, AuthError, authenticate(new(bytes.Buffer), 0, "", ca, nil))
+			require.Equal(t, AuthError, authenticate(0, "", ca, nil))
 		})
 	})
 }
@@ -97,7 +94,7 @@ func TestAuthorize_NoKeys(t *testing.T) {
 		require.NoError(t, e)
 
 		WithSSHAgent(func(a agent.Agent) {
-			r := authenticate(new(bytes.Buffer), 0, "", ca, p)
+			r := authenticate(0, "", ca, p)
 			require.Equal(t, AuthError, r)
 		})
 	})
@@ -161,36 +158,36 @@ func TestPamAuthorize(t *testing.T) {
 			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c})
 
 			// test with missing ca file
-			r := pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{"ca_file=missing"})
+			r := pamAuthenticate(getUID(), "foober", []string{"ca_file=missing"})
 			require.Equal(t, AuthError, r,
 				"authenticate succeeded when it should've failed")
 
 			// test with no principal
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt})
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt})
 			require.Equal(t, AuthSuccess, r,
 				"authenticate failed when it should've succeeded")
 
 			// test that the wrong principal fails
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "duber", []string{caPamOpt})
+			r = pamAuthenticate(getUID(), "duber", []string{caPamOpt})
 			require.Equal(t, AuthError, r)
 
 			// negative test with authorized_principals pam 2option
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt,
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
 				fmt.Sprintf("authorized_principals=group:boober")})
 			require.Equal(t, AuthError, r)
 
 			// positive test with authorized_principals_file pam option
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt,
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
 				fmt.Sprintf("authorized_principals_file=%s", principals)})
 			require.Equal(t, AuthSuccess, r)
 
 			// negative test with a bad authorized_principals_file pam option
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt,
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
 				"authorized_principals_file=foober"})
 			require.Equal(t, AuthError, r)
 
 			// test that a user not in the required group passes.
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt,
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
 				"group=nosuchgroup"})
 			require.Equal(t, AuthSuccess, r)
 		})
@@ -200,12 +197,12 @@ func TestPamAuthorize(t *testing.T) {
 			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c2})
 
 			// test without requiring the user principal
-			r := pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"})
+			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"})
 			require.Equal(t, AuthSuccess, r,
 				"authenticate failed but no_require_user_principal was true")
 
 			// test without requiring the user principal
-			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt, "authorized_principals=group:foober"})
+			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt, "authorized_principals=group:foober"})
 			require.Equal(t, AuthError, r,
 				"authenticate succeeded despite require_user_principal")
 		})
@@ -311,7 +308,7 @@ func TestWithWrongCA(t *testing.T) {
 		c := signedCert(userPub, wrongSigner, "foober", []string{"group:foober"})
 		WithSSHAgent(func(a agent.Agent) {
 			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c})
-			r := pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt})
+			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt})
 			require.Equal(t, AuthError, r, "authenticate succeeded when it should have failed")
 		})
 	})
