@@ -35,7 +35,6 @@ import (
 	"log/syslog"
 	"net"
 	"os"
-	"path"
 	"runtime"
 	"strings"
 
@@ -65,19 +64,20 @@ func pamLog(format string, args ...interface{}) {
 	l.Warning(fmt.Sprintf(format, args...))
 }
 
-func connectAgent(authSock string) (agent.ExtendedAgent, error) {
-	agentSock, err := net.Dial("unix", authSock)
+type Agent struct {
+	conn  net.Conn
+	agent agent.ExtendedAgent
+	keys  []*agent.Key
+}
+
+func NewAgent(sock string) (*Agent, error) {
+	conn, err := net.Dial("unix", sock)
 	if err != nil {
-		// if we're here, we probably can't stat the socket to get the owner uid
-		// to decorate the logs, but we might be able to read the parent directory.
-		ownerUID := ownerUID(path.Dir(authSock))
-		currentUID := os.Getuid()
-		return nil, fmt.Errorf("error opening auth sock (sock owner uid: %d/%s) by (caller: %d/%s)",
-			ownerUID, getUsername(ownerUID), currentUID, getUsername(currentUID))
+		return nil, err
 	}
 
-	a := agent.NewClient(agentSock)
-	keys, err := a.List()
+	agent := agent.NewClient(conn)
+	keys, err := agent.List()
 	if err != nil {
 		return nil, fmt.Errorf("error listing keys: %v", err)
 	}
@@ -86,7 +86,15 @@ func connectAgent(authSock string) (agent.ExtendedAgent, error) {
 		return nil, fmt.Errorf("no certs loaded")
 	}
 
-	return a, nil
+	return &Agent{conn, agent, keys}, nil
+}
+
+func (agent *Agent) Keys() []*agent.Key {
+	return agent.keys
+}
+
+func (agent *Agent) Close() error {
+	return agent.conn.Close()
 }
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
@@ -118,11 +126,16 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		}()
 	}
 
-	a, err := connectAgent(authSock)
+	agent, err := NewAgent(authSock)
 	if err != nil {
 		pamLog("error: %v", err)
 		return AuthError
 	}
+	defer func() {
+		if err := agent.Close(); err != nil {
+			pamLog("error closing agent conn: %v", err)
+		}
+	}()
 
 	caBytes, err := os.ReadFile(ca)
 	if err != nil {
@@ -156,6 +169,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		},
 	}
 
+	keys := agent.Keys()
 	for idx := range keys {
 		pubKey, err := ssh.ParsePublicKey(keys[idx].Marshal())
 		if err != nil {

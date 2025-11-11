@@ -119,14 +119,6 @@ import (
 	"unsafe"
 )
 
-// ownerUID returns the uid of the owner of a given file or directory.
-func ownerUID(path string) int {
-	cPath := C.CString(path)
-	defer C.free(unsafe.Pointer(cPath))
-
-	return int(C.owner_uid(cPath))
-}
-
 // getUID is used for testing.
 func getUID() int {
 	u, err := user.Current()
