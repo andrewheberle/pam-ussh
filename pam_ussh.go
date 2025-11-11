@@ -89,12 +89,16 @@ func NewAgent(sock string) (*Agent, error) {
 	return &Agent{conn, agent, keys}, nil
 }
 
+func (agent *Agent) Close() error {
+	return agent.conn.Close()
+}
+
 func (agent *Agent) Keys() []*agent.Key {
 	return agent.keys
 }
 
-func (agent *Agent) Close() error {
-	return agent.conn.Close()
+func (agent *Agent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
+	return agent.agent.Sign(key, data)
 }
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
@@ -219,7 +223,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 			return AuthError
 		}
 
-		signedData, err := a.Sign(pubKey, randBytes)
+		signedData, err := agent.Sign(pubKey, randBytes)
 		if err != nil {
 			pamLog("error signing data: %v", err)
 			return AuthError
