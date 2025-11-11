@@ -85,6 +85,8 @@ func connectAgent(authSock string) (agent.ExtendedAgent, error) {
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("no certs loaded")
 	}
+
+	return a, nil
 }
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
