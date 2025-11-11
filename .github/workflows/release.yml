@@ -24,11 +24,18 @@ jobs:
         buildpackage-opts: --build=binary --no-sign
         host-arch: ${{ matrix.arch }}
     
+    - name: Checksum package
+      run: |
+        cd debian/artifacts
+        sha256sum pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb > pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb.sha256sum
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: deb-${{ matrix.arch }}
-        path: debian/artifacts/*.deb
+        path: |
+          debian/artifacts/*.deb
+          debian/artifacts/*.deb.sha256sum
   
   release:
     needs: build-deb
@@ -45,4 +52,6 @@ jobs:
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
-        files: artifacts/*.deb
+        files: |
+          artifacts/*.deb
+          artifacts/*.deb.sha256sum
