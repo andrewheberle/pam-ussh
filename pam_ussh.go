@@ -31,7 +31,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"log/syslog"
 	"net"
 	"os"
@@ -103,7 +102,7 @@ func (agent *Agent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error)
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
-func authenticate(w io.Writer, uid int, required_principal string, ca string, principals map[string]struct{}) AuthResult {
+func authenticate(uid int, required_principal string, ca string, principals map[string]struct{}) AuthResult {
 	if len(principals) == 0 && len(required_principal) == 0 {
 		pamLog("requesting to authenticate with no required_principal and no principals")
 		return AuthError
@@ -301,7 +300,7 @@ func parseArgs(username string, argv []string) (required_principal, userCA strin
 	return required_principal, userCA, authorizedPrincipals, nil
 }
 
-func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthResult {
+func pamAuthenticate(uid int, username string, argv []string) AuthResult {
 	runtime.GOMAXPROCS(1)
 
 	// parse args
@@ -310,7 +309,7 @@ func pamAuthenticate(w io.Writer, uid int, username string, argv []string) AuthR
 		return AuthError
 	}
 
-	return authenticate(w, uid, required_principal, userCA, authorizedPrincipals)
+	return authenticate(uid, required_principal, userCA, authorizedPrincipals)
 }
 
 func main() {}

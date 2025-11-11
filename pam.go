@@ -28,7 +28,6 @@ package main
 // code in here can't be tested because it relies on cgo. :(
 
 import (
-	"os"
 	"unsafe"
 )
 
@@ -72,7 +71,7 @@ func pam_sm_authenticate(pamh *C.pam_handle_t, flags, argc C.int, argv **C.char)
 		return C.PAM_USER_UNKNOWN
 	}
 
-	r := pamAuthenticate(os.Stderr, uid, C.GoString(cUsername), sliceFromArgv(argc, argv))
+	r := pamAuthenticate(uid, C.GoString(cUsername), sliceFromArgv(argc, argv))
 	if r == AuthError {
 		return C.PAM_AUTH_ERR
 	}
