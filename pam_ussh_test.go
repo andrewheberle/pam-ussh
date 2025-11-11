@@ -69,7 +69,6 @@ func TestBadAuthSock(t *testing.T) {
 		os.Setenv("SSH_AUTH_SOCK", s)
 		b := new(bytes.Buffer)
 		require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
-		require.Contains(t, b.String(), "connect: no such file or directory")
 	})
 }
 
@@ -161,8 +160,13 @@ func TestPamAuthorize(t *testing.T) {
 		WithSSHAgent(func(a agent.Agent) {
 			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c})
 
+			// test with missing ca file
+			r := pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{"ca_file=missing"})
+			require.Equal(t, AuthError, r,
+				"authenticate succeeded when it should've failed")
+
 			// test with no principal
-			r := pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt})
+			r = pamAuthenticate(new(bytes.Buffer), getUID(), "foober", []string{caPamOpt})
 			require.Equal(t, AuthSuccess, r,
 				"authenticate failed when it should've succeeded")
 

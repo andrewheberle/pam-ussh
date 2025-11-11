@@ -35,7 +35,6 @@ import (
 	"log/syslog"
 	"net"
 	"os"
-	"path"
 	"runtime"
 	"strings"
 
@@ -65,6 +64,43 @@ func pamLog(format string, args ...interface{}) {
 	l.Warning(fmt.Sprintf(format, args...))
 }
 
+type Agent struct {
+	conn  net.Conn
+	agent agent.ExtendedAgent
+	keys  []*agent.Key
+}
+
+func NewAgent(sock string) (*Agent, error) {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return nil, err
+	}
+
+	agent := agent.NewClient(conn)
+	keys, err := agent.List()
+	if err != nil {
+		return nil, fmt.Errorf("error listing keys: %v", err)
+	}
+
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no certs loaded")
+	}
+
+	return &Agent{conn, agent, keys}, nil
+}
+
+func (agent *Agent) Close() error {
+	return agent.conn.Close()
+}
+
+func (agent *Agent) Keys() []*agent.Key {
+	return agent.keys
+}
+
+func (agent *Agent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
+	return agent.agent.Sign(key, data)
+}
+
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
 func authenticate(w io.Writer, uid int, required_principal string, ca string, principals map[string]struct{}) AuthResult {
@@ -75,7 +111,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
-		pamLog("No SSH_AUTH_SOCK")
+		pamLog("no SSH_AUTH_SOCK")
 		return AuthError
 	}
 
@@ -94,33 +130,20 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		}()
 	}
 
-	agentSock, err := net.Dial("unix", authSock)
+	agent, err := NewAgent(authSock)
 	if err != nil {
-		fmt.Fprintf(w, "error connecting to %s: %v\n", authSock, err)
-		// if we're here, we probably can't stat the socket to get the owner uid
-		// to decorate the logs, but we might be able to read the parent directory.
-		ownerUID := ownerUID(path.Dir(authSock))
-		currentUID := os.Getuid()
-		pamLog("error opening auth sock (sock owner uid: %d/%s) by (caller: %d/%s)",
-			ownerUID, getUsername(ownerUID), currentUID, getUsername(currentUID))
+		pamLog("error: %v", err)
 		return AuthError
 	}
-
-	a := agent.NewClient(agentSock)
-	keys, err := a.List()
-	if err != nil {
-		pamLog("Error listing keys: %v", err)
-		return AuthError
-	}
-
-	if len(keys) == 0 {
-		pamLog("No certs loaded.\n")
-		return AuthError
-	}
+	defer func() {
+		if err := agent.Close(); err != nil {
+			pamLog("error closing agent conn: %v", err)
+		}
+	}()
 
 	caBytes, err := os.ReadFile(ca)
 	if err != nil {
-		pamLog("error reading ca: %v\n", err)
+		pamLog("error reading ca: %v", err)
 		return AuthError
 	}
 
@@ -150,6 +173,7 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		},
 	}
 
+	keys := agent.Keys()
 	for idx := range keys {
 		pubKey, err := ssh.ParsePublicKey(keys[idx].Marshal())
 		if err != nil {
@@ -195,31 +219,31 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		// have the private key
 		randBytes := make([]byte, 32)
 		if _, err := rand.Read(randBytes); err != nil {
-			pamLog("Error grabbing random bytes: %v\n", err)
+			pamLog("error grabbing random bytes: %v", err)
 			return AuthError
 		}
 
-		signedData, err := a.Sign(pubKey, randBytes)
+		signedData, err := agent.Sign(pubKey, randBytes)
 		if err != nil {
-			pamLog("error signing data: %v\n", err)
+			pamLog("error signing data: %v", err)
 			return AuthError
 		}
 
 		if err := pubKey.Verify(randBytes, signedData); err != nil {
-			pamLog("signature verification failed: %v\n", err)
+			pamLog("signature verification failed: %v", err)
 			return AuthError
 		}
 
 		if len(principals) == 0 {
-			pamLog("Authentication succeeded for %q (cert %q, %d)",
+			pamLog("authentication succeeded for %q (cert %q, %d)",
 				certValidFor, cert.KeyId, cert.Serial)
 			return AuthSuccess
 		}
 
 		for _, p := range cert.ValidPrincipals {
 			if _, ok := principals[p]; ok {
-				pamLog("Authentication succeeded for %s. Matched principal %s, cert %d",
-					cert.ValidPrincipals[0], p, cert.Serial)
+				pamLog("authentication succeeded for %q. Matched principal %q (cert %q, %d)",
+					cert.ValidPrincipals[0], p, cert.KeyId, cert.Serial)
 				return AuthSuccess
 			}
 		}
@@ -270,7 +294,7 @@ func parseArgs(username string, argv []string) (required_principal, userCA strin
 		case "no_require_user_principal":
 			required_principal = ""
 		default:
-			pamLog("unknown option: %s\n", opt[0])
+			pamLog("unknown option: %s", opt[0])
 		}
 	}
 
