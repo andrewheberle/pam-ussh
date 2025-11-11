@@ -24,7 +24,6 @@ THE SOFTWARE.
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -56,8 +55,7 @@ func TestNoAuthSock(t *testing.T) {
 	oldAgent := os.Getenv("SSH_AUTH_SOCK")
 	defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
 	os.Unsetenv("SSH_AUTH_SOCK")
-	b := new(bytes.Buffer)
-	require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
+	require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 }
 
 func TestBadAuthSock(t *testing.T) {
@@ -67,8 +65,7 @@ func TestBadAuthSock(t *testing.T) {
 		oldAgent := os.Getenv("SSH_AUTH_SOCK")
 		defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
 		os.Setenv("SSH_AUTH_SOCK", s)
-		b := new(bytes.Buffer)
-		require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
+		require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 	})
 }
 
