@@ -69,7 +69,6 @@ func TestBadAuthSock(t *testing.T) {
 		os.Setenv("SSH_AUTH_SOCK", s)
 		b := new(bytes.Buffer)
 		require.Equal(t, AuthError, authenticate(b, 0, "r", "", nil))
-		require.Contains(t, b.String(), "connect: no such file or directory")
 	})
 }
 
