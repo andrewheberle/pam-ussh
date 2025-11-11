@@ -65,6 +65,28 @@ func pamLog(format string, args ...interface{}) {
 	l.Warning(fmt.Sprintf(format, args...))
 }
 
+func connectAgent(authSock string) (agent.ExtendedAgent, error) {
+	agentSock, err := net.Dial("unix", authSock)
+	if err != nil {
+		// if we're here, we probably can't stat the socket to get the owner uid
+		// to decorate the logs, but we might be able to read the parent directory.
+		ownerUID := ownerUID(path.Dir(authSock))
+		currentUID := os.Getuid()
+		return nil, fmt.Errorf("error opening auth sock (sock owner uid: %d/%s) by (caller: %d/%s)",
+			ownerUID, getUsername(ownerUID), currentUID, getUsername(currentUID))
+	}
+
+	a := agent.NewClient(agentSock)
+	keys, err := a.List()
+	if err != nil {
+		return nil, fmt.Errorf("error listing keys: %v", err)
+	}
+
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no certs loaded")
+	}
+}
+
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
 func authenticate(w io.Writer, uid int, required_principal string, ca string, principals map[string]struct{}) AuthResult {
@@ -94,27 +116,9 @@ func authenticate(w io.Writer, uid int, required_principal string, ca string, pr
 		}()
 	}
 
-	agentSock, err := net.Dial("unix", authSock)
+	a, err := connectAgent(authSock)
 	if err != nil {
-		fmt.Fprintf(w, "error connecting to %s: %v", authSock, err)
-		// if we're here, we probably can't stat the socket to get the owner uid
-		// to decorate the logs, but we might be able to read the parent directory.
-		ownerUID := ownerUID(path.Dir(authSock))
-		currentUID := os.Getuid()
-		pamLog("error opening auth sock (sock owner uid: %d/%s) by (caller: %d/%s)",
-			ownerUID, getUsername(ownerUID), currentUID, getUsername(currentUID))
-		return AuthError
-	}
-
-	a := agent.NewClient(agentSock)
-	keys, err := a.List()
-	if err != nil {
-		pamLog("Error listing keys: %v", err)
-		return AuthError
-	}
-
-	if len(keys) == 0 {
-		pamLog("no certs loaded")
+		pamLog("error: %v", err)
 		return AuthError
 	}
 
