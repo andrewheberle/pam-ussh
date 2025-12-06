@@ -1,12 +1,12 @@
 Source: pam-ussh
 Section: admin
 Maintainer: Andrew Heberle <andrew.heberle@gmail.com>
-Build-Depends: debhelper (>= 13), golang:native (>= 1.24), git, ca-certificates, libpam0g-dev (>= 1.7)
+Build-Depends: debhelper (>= 13), golang:native (>= 1.24), git, ca-certificates, libpam0g-dev (>= 1.5)
 Standards-Version: 3.9.6
 Homepage: https://github.com/andrewheberle/pam-ussh
 
 Package: pam-ussh
 Architecture: amd64 arm64
-Depends: libpam0g (>= 1.7)
-Description: pam module for ussh.
- A fork of Uber's SSH certificate pam module.
+Depends: libpam0g (>= 1.5)
+Description: PAM module for sudo access.
+ A fork of Uber's SSH certificate PAM module for sudo access.
