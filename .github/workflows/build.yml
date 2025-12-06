@@ -17,7 +17,7 @@ jobs:
       matrix:
         go: [ '1.24', '1.25' ]
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install required packages
       run: sudo apt-get install -qqy libpam0g-dev
