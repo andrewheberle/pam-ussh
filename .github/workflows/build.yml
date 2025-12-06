@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v6
 
     - name: Install required packages
-      run: sudo apt-get install -qqy libpam0g-dev
+      run: sudo apt-get install -qqqy libpam0g-dev
       
     - name: Set up Go
       uses: actions/setup-go@v6
