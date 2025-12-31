@@ -30,7 +30,7 @@ jobs:
         sha256sum pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb > pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb.sha256sum
     
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: deb-${{ matrix.arch }}
         path: |
@@ -43,7 +43,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v7
       with:
         path: artifacts
         pattern: deb-*
