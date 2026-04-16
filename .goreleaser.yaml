@@ -1,0 +1,91 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: module
+    binary: pam_ussh.so
+    env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if eq .Arch "amd64" }}CC=zig cc -target x86_64-linux{{- end }}
+        {{- if eq .Arch "arm64"}}CC=zig cc -target aarch64-linux{{- end }}
+      - >-
+        {{- if eq .Arch "amd64" }}CXX=zig c++ -target x86_64-linux{{- end }}
+        {{- if eq .Arch "arm64"}}CXX=zig c++ -target aarch64-linux{{- end }}
+    flags:
+      - -trimpath
+    goarch:
+      - amd64
+      - arm64
+    goos:
+      - linux
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X main.Date={{ .CommitDate }}
+    buildmode: c-shared
+
+archives:
+  - ids:
+      - module
+    allow_different_binary_count: true
+    formats: [tar.gz]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+changelog:
+  use: github-native
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  draft: false
+  make_latest: true
+  replace_existing_artifacts: true
+  prerelease: auto
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+nfpms:
+  - ids:
+      - module
+    package_name: pam-ussh
+    homepage: https://github.com/andrewheberle/pam-ussh
+    maintainer: Andrew Heberle <andrew.heberle@gmail.com>
+    description: |-
+      PAM module for sudo access using SSH certificates.
+      A fork of Uber's SSH certificate PAM module for sudo access.
+    formats:
+      - deb
+    libdirs:
+      cshared: /usr/lib/security
+    dependencies:
+      - libpam0g
+    section: admin
+    mtime: "{{ .CommitDate }}"
+
+sboms:
+  - id: package
+    artifacts: package
+    disable: false
+  - artifacts: archive
+    disable: false
+

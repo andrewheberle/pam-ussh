@@ -1,57 +1,52 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 permissions: {}
 
 jobs:
   build-deb:
+    name: Build with GoReleaser
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
-    - uses: actions/checkout@v6
-    
-    - uses: jtdor/build-deb-action@v1
-      env:
-        DEB_BUILD_OPTIONS: noautodbgsym
-      with:
-        buildpackage-opts: --build=binary --no-sign
-        host-arch: ${{ matrix.arch }}
-    
-    - name: Checksum package
-      run: |
-        cd debian/artifacts
-        sha256sum pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb > pam-ussh_${GITHUB_REF#v}_${{ matrix.arch }}.deb.sha256sum
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: deb-${{ matrix.arch }}
-        path: |
-          debian/artifacts/*.deb
-          debian/artifacts/*.deb.sha256sum
-  
-  release:
-    needs: build-deb
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        pattern: deb-*
-        merge-multiple: true
-    
-    - name: Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          artifacts/*.deb
-          artifacts/*.deb.sha256sum
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: stable
+          cache: true
+      - uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - name: Set up Zig compiler
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      - name: Release with GoReleaser
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attest build artifacts
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: ./client/dist/checksums.txt
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-dist-artifact
+          path: dist/**/*.deb
+          retention-days: 1
+

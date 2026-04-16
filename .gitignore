@@ -1,3 +1,6 @@
 # Ignore build artifacts
 *.so
 *.h
+
+# Ignore goreleaser dist dir
+dist/

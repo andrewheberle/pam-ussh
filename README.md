@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/andrewheberle/pam-ussh?logo=go&style=flat-square)](https://goreportcard.com/report/github.com/andrewheberle/pam-ussh)
 [![codecov](https://codecov.io/gh/andrewheberle/pam-ussh/graph/badge.svg?token=CDLzj2pg5W)](https://codecov.io/gh/andrewheberle/pam-ussh)
 
-This is a fork of Uber's SSH certificate pam module.
+This is a fork of Uber's SSH certificate PAM module.
 
 This is a PAM module that will authenticate a user based on them having an SSH certificate in
 their ssh-agent signed by a specified SSH CA. 
