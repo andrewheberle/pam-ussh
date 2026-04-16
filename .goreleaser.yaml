@@ -10,14 +10,7 @@ builds:
     env:
       - CGO_ENABLED=1
       - >-
-        {{- if eq .Arch "amd64" }}CC=zig cc -target x86_64-linux -isystem /usr/include/x86_64-linux-gnu -isystem /usr/include{{- end }}
-        {{- if eq .Arch "arm64"}}CC=zig cc -target aarch64-linux -isystem /usr/include/aarch64-linux-gnu -isystem /usr/include{{- end }}
-      - >-
-        {{- if eq .Arch "amd64" }}CXX=zig c++ -target x86_64-linux -isystem /usr/include/x86_64-linux-gnu -isystem /usr/include{{- end }}
-        {{- if eq .Arch "arm64"}}CXX=zig c++ -target aarch64-linux -isystem /usr/unclude/aarch64-linux-gnu -isystem /usr/include{{- end }}
-      - >-
-        {{- if eq .Arch "amd64" }}CGO_LDFLAGS=-L/usr/lib/x86_64-linux-gnu{{- end }}
-        {{- if eq .Arch "arm64"}}CGO_LDFLAGS=-L/usr/lib/aarch64-linux-gnu{{- end }}
+        {{- if eq .Arch "arm64"}}CC=aarch64-linux-gnu-gcc{{- end }}
     flags:
       - -trimpath
     goarch:

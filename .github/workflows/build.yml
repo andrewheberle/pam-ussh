@@ -23,8 +23,6 @@ jobs:
           cache: true
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-      - name: Set up Zig compiler
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
       - name: Set up build environment
         run: |
           sudo dpkg --add-architecture arm64
@@ -33,7 +31,7 @@ jobs:
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           sudo apt-get -qqq update
-          sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64
+          sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64 gcc-aarch64-linux-gnu
       - name: Build snapshot with GoReleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
