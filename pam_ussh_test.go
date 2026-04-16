@@ -30,10 +30,10 @@ import (
 	"net"
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -41,13 +41,17 @@ import (
 func TestLoadPrincipals(t *testing.T) {
 	WithTempDir(func(dir string) {
 		p := path.Join(dir, "principals")
-		e := os.WriteFile(p, []byte("group:t"), 0444)
-		require.NoError(t, e)
+		if err := os.WriteFile(p, []byte("group:t"), 0444); err != nil {
+			panic(err)
+		}
 
-		r, e := loadValidPrincipals(p)
-		require.NoError(t, e)
-		_, ok := r["group:t"]
-		require.True(t, ok)
+		r, err := loadValidPrincipals(p)
+		if err != nil {
+			t.Fatal("loadValidPrincipals(): failed unexpectedly")
+		}
+		if _, ok := r["group:t"]; !ok {
+			t.Error("loadValidPrincipals(): did not get expected principal")
+		}
 	})
 }
 
@@ -61,7 +65,10 @@ func TestNoAuthSock(t *testing.T) {
 	if err := os.Unsetenv("SSH_AUTH_SOCK"); err != nil {
 		panic(err)
 	}
-	require.Equal(t, AuthError, authenticate(0, "r", "", nil))
+	got := authenticate(0, "r", "", nil)
+	if got != AuthError {
+		t.Errorf("authenticate(): got %v want %v", got, AuthError)
+	}
 }
 
 func TestBadAuthSock(t *testing.T) {
@@ -77,7 +84,10 @@ func TestBadAuthSock(t *testing.T) {
 		if err := os.Setenv("SSH_AUTH_SOCK", s); err != nil {
 			panic(err)
 		}
-		require.Equal(t, AuthError, authenticate(0, "r", "", nil))
+		got := authenticate(0, "r", "", nil)
+		if got != AuthError {
+			t.Errorf("authenticate(): got %v want %v", got, AuthError)
+		}
 	})
 }
 
@@ -85,10 +95,17 @@ func TestBadCA(t *testing.T) {
 	WithTempDir(func(dir string) {
 		ca := path.Join(dir, "badca")
 		WithSSHAgent(func(a agent.Agent) {
-			k, e := rsa.GenerateKey(rand.Reader, 1024)
-			require.NoError(t, e)
-			require.NoError(t, a.Add(agent.AddedKey{PrivateKey: k}))
-			require.Equal(t, AuthError, authenticate(0, "", ca, nil))
+			k, err := rsa.GenerateKey(rand.Reader, 2048)
+			if err != nil {
+				panic(err)
+			}
+			if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
+				panic(err)
+			}
+			got := authenticate(0, "", ca, nil)
+			if got != AuthError {
+				t.Errorf("authenticate(): got %v want %v", got, AuthError)
+			}
 		})
 	})
 }
@@ -98,16 +115,23 @@ func TestAuthorize_NoKeys(t *testing.T) {
 		p := map[string]struct{}{"group:t": {}}
 
 		ca := path.Join(dir, "ca")
-		k, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		pub, e := ssh.NewPublicKey(&k.PublicKey)
-		require.NoError(t, e)
-		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444)
-		require.NoError(t, e)
+		k, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		pub, err := ssh.NewPublicKey(&k.PublicKey)
+		if err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444); err != nil {
+			panic(err)
+		}
 
 		WithSSHAgent(func(a agent.Agent) {
-			r := authenticate(0, "", ca, p)
-			require.Equal(t, AuthError, r)
+			got := authenticate(0, "", ca, p)
+			if got != AuthError {
+				t.Errorf("authenticate(): got %v want %v", got, AuthError)
+			}
 		})
 	})
 }
@@ -134,12 +158,25 @@ func TestParseArgs(t *testing.T) {
 	for _, tt := range tests {
 		required_principal, userCA, authorizedPrincipals, err := parseArgs(tt.username, tt.args)
 		if tt.wantErr {
-			require.Error(t, err, tt.name)
+			if err == nil {
+				t.Fatalf("%s: succeeded unexpectededly", tt.name)
+			}
 		} else {
-			require.NoError(t, err, tt.name)
-			require.Equal(t, tt.wantRequiredPrincipal, required_principal, tt.name)
-			require.Equal(t, tt.wantUserCA, userCA, tt.name)
-			require.Equal(t, tt.wantAuthorizedPrincipals, authorizedPrincipals, tt.name)
+			if err != nil {
+				t.Fatalf("%s: failed unexpectededly", tt.name)
+			}
+
+			if tt.wantRequiredPrincipal != required_principal {
+				t.Errorf("%s: required_principal got %v want %v", tt.name, required_principal, tt.wantRequiredPrincipal)
+			}
+
+			if tt.wantUserCA != userCA {
+				t.Errorf("%s: userCA got %v want %v", tt.name, userCA, tt.wantUserCA)
+			}
+
+			if !reflect.DeepEqual(tt.wantAuthorizedPrincipals, authorizedPrincipals) {
+				t.Errorf("%s: authorizedPrincipals got %v want %v", tt.name, authorizedPrincipals, tt.wantAuthorizedPrincipals)
+			}
 		}
 	}
 }
@@ -150,60 +187,61 @@ func TestPamAuthorize(t *testing.T) {
 		caPamOpt := fmt.Sprintf("ca_file=%s", ca)
 		principals := path.Join(dir, "principals")
 
-		k, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		signer, e := ssh.NewSignerFromKey(k)
-		require.NoError(t, e)
-		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(signer.PublicKey()), 0444)
-		require.NoError(t, e)
+		k, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		signer, err := ssh.NewSignerFromKey(k)
+		if err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(signer.PublicKey()), 0444); err != nil {
+			panic(err)
+		}
 
-		userPriv, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		userPub, e := ssh.NewPublicKey(&userPriv.PublicKey)
-		require.NoError(t, e)
+		userPriv, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		userPub, err := ssh.NewPublicKey(&userPriv.PublicKey)
+		if err != nil {
+			panic(err)
+		}
 		c := signedCert(userPub, signer, "foober", []string{"group:foober"})
 
-		e = os.WriteFile(principals, []byte("group:foober"), 0444)
-		require.NoError(t, e)
+		if err := os.WriteFile(principals, []byte("group:foober"), 0444); err != nil {
+			panic(err)
+		}
 
 		WithSSHAgent(func(a agent.Agent) {
 			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
 				panic(err)
 			}
 
-			// test with missing ca file
-			r := pamAuthenticate(getUID(), "foober", []string{"ca_file=missing"})
-			require.Equal(t, AuthError, r,
-				"authenticate succeeded when it should've failed")
+			uid := getUID()
 
-			// test with no principal
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt})
-			require.Equal(t, AuthSuccess, r,
-				"authenticate failed when it should've succeeded")
+			tests := []struct {
+				name     string
+				uid      int
+				username string
+				argv     []string
+				want     AuthResult
+			}{
+				{"test missing ca file fails", uid, "foober", []string{"ca_file=missing"}, AuthError},
+				{"no principal", uid, "foober", []string{caPamOpt}, AuthSuccess},
+				{"test that the wrong principal fails", uid, "duber", []string{caPamOpt}, AuthError},
+				{"negative test with authorized_principals pam 2option", uid, "foober", []string{caPamOpt, "authorized_principals=group:boober"}, AuthError},
+				{"positive test with authorized_principals_file pam option", uid, "foober", []string{caPamOpt, fmt.Sprintf("authorized_principals_file=%s", principals)}, AuthSuccess},
+				{"negative test with a bad authorized_principals_file pam option", uid, "foober", []string{caPamOpt, "authorized_principals_file=foober"}, AuthError},
+				{"test that a user not in the required group passes (deprecated option)", uid, "foober", []string{caPamOpt, "group=nosuchgroup"}, AuthSuccess},
+			}
 
-			// test that the wrong principal fails
-			r = pamAuthenticate(getUID(), "duber", []string{caPamOpt})
-			require.Equal(t, AuthError, r)
-
-			// negative test with authorized_principals pam 2option
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
-				"authorized_principals=group:boober"})
-			require.Equal(t, AuthError, r)
-
-			// positive test with authorized_principals_file pam option
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
-				fmt.Sprintf("authorized_principals_file=%s", principals)})
-			require.Equal(t, AuthSuccess, r)
-
-			// negative test with a bad authorized_principals_file pam option
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
-				"authorized_principals_file=foober"})
-			require.Equal(t, AuthError, r)
-
-			// test that a user not in the required group passes.
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
-				"group=nosuchgroup"})
-			require.Equal(t, AuthSuccess, r)
+			for _, tt := range tests {
+				got := pamAuthenticate(tt.uid, tt.username, tt.argv)
+				if got != tt.want {
+					t.Errorf("authenticate(): got %v want %v", got, tt.want)
+				}
+			}
 		})
 
 		c2 := signedCert(userPub, signer, "user", []string{"group:foober"})
@@ -213,14 +251,14 @@ func TestPamAuthorize(t *testing.T) {
 			}
 
 			// test without requiring the user principal
-			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"})
-			require.Equal(t, AuthSuccess, r,
-				"authenticate failed but no_require_user_principal was true")
+			if r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"}); r != AuthSuccess {
+				t.Error("authenticate() failed unexpectedly despite no_require_user_principal")
+			}
 
 			// test without requiring the user principal
-			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt, "authorized_principals=group:foober"})
-			require.Equal(t, AuthError, r,
-				"authenticate succeeded despite require_user_principal")
+			if r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "authorized_principals=group:foober"}); r != AuthError {
+				t.Error("authenticate() succeeded unexpectedly despite no_require_user_principal not set")
+			}
 		})
 	})
 }
@@ -321,24 +359,37 @@ func TestWithWrongCA(t *testing.T) {
 		caPamOpt := fmt.Sprintf("ca_file=%s", ca)
 
 		// The correct CA is written to file for the pamAuthenticate function
-		correctCAKey, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		correctCAPub, e := ssh.NewPublicKey(&correctCAKey.PublicKey)
-		require.NoError(t, e)
-		e = os.WriteFile(ca, ssh.MarshalAuthorizedKey(correctCAPub), 0444)
-		require.NoError(t, e)
+		correctCAKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		correctCAPub, err := ssh.NewPublicKey(&correctCAKey.PublicKey)
+		if err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(correctCAPub), 0444); err != nil {
+			panic(err)
+		}
 
 		// The wrong CA is just used for signing the certificate
-		wrongCAKey, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		wrongSigner, e := ssh.NewSignerFromKey(wrongCAKey)
-		require.NoError(t, e)
+		wrongCAKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		wrongSigner, err := ssh.NewSignerFromKey(wrongCAKey)
+		if err != nil {
+			panic(err)
+		}
 
 		// Generate a user keypair
-		userPriv, e := rsa.GenerateKey(rand.Reader, 1024)
-		require.NoError(t, e)
-		userPub, e := ssh.NewPublicKey(&userPriv.PublicKey)
-		require.NoError(t, e)
+		userPriv, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		userPub, err := ssh.NewPublicKey(&userPriv.PublicKey)
+		if err != nil {
+			panic(err)
+		}
 
 		// Sign the user keypair with the wrong CA and try to verify it
 		c := signedCert(userPub, wrongSigner, "foober", []string{"group:foober"})
@@ -346,8 +397,10 @@ func TestWithWrongCA(t *testing.T) {
 			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
 				panic(err)
 			}
-			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt})
-			require.Equal(t, AuthError, r, "authenticate succeeded when it should have failed")
+			got := pamAuthenticate(getUID(), "foober", []string{caPamOpt})
+			if got != AuthError {
+				t.Error("authenticate succeeded when it should have failed")
+			}
 		})
 	})
 }
