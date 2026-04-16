@@ -306,9 +306,7 @@ func WithSSHAgent(fn func(agent.Agent)) {
 							panic(err)
 						}
 					}()
-					if err := agent.ServeAgent(a, c); err != nil {
-						panic(err)
-					}
+					_ = agent.ServeAgent(a, c)
 				}()
 			}
 		}()
