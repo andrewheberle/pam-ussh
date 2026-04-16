@@ -39,7 +39,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: build --clean --snapshot
+          args: release --clean --snapshot --skip sign
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
