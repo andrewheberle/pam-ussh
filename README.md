@@ -3,17 +3,17 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/andrewheberle/pam-ussh?logo=go&style=flat-square)](https://goreportcard.com/report/github.com/andrewheberle/pam-ussh)
 [![codecov](https://codecov.io/gh/andrewheberle/pam-ussh/graph/badge.svg?token=CDLzj2pg5W)](https://codecov.io/gh/andrewheberle/pam-ussh)
 
-This is a fork of Uber's SSH certificate pam module.
+This is a fork of Uber's SSH certificate PAM module.
 
 This is a PAM module that will authenticate a user based on them having an SSH certificate in
-their ssh-agent signed by a specified SSH CA. 
+their ssh-agent signed by a specified SSH CA.
 
-This is primarily intended as an authentication module for sudo. Using it for something else 
+This is primarily intended as an authentication module for sudo. Using it for something else
 may be unsafe and is totally untested.
 
-An example usage would be you SSH to a remote machine and sshd authenticates you (probably 
-using your SSH certificate, because if you're using it for this, you're probably using it for sshd 
-as well). At that point when you want to run a command that requires authentication (eg. 
+An example usage would be you SSH to a remote machine and sshd authenticates you (probably
+using your SSH certificate, because if you're using it for this, you're probably using it for sshd
+as well). At that point when you want to run a command that requires authentication (eg.
 `sudo`), you can use pam-ussh for authentication.
 
 Works on Linux and OSX. BSD doesn't work because Go doesn't (yet) support `buildmode=c-shared`
@@ -21,11 +21,11 @@ on BSD.
 
 ## Building
 
-1. Clone the repo and run 'make'
+1. Clone the repo and compile:
 ```sh
   git clone https://github.com/andrewheberle/pam-ussh.git
   cd pam-ussh
-  make
+  go build -buildmode=c-shared -o pam_ussh.so
 ```
 
 ## Usage

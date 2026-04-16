@@ -60,7 +60,7 @@ func pamLog(format string, args ...interface{}) {
 	if err != nil {
 		return
 	}
-	l.Warning(fmt.Sprintf(format, args...))
+	_ = l.Warning(fmt.Sprintf(format, args...))
 }
 
 type Agent struct {
@@ -256,7 +256,11 @@ func loadValidPrincipals(principals string) (map[string]struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			pamLog("problem closing principals file: %v", err)
+		}
+	}()
 
 	p := make(map[string]struct{})
 	scanner := bufio.NewScanner(f)
