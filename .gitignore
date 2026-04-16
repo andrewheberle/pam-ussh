@@ -5,4 +5,3 @@
 # Ignore goreleaser dist dir
 dist/
 
-.zig-cache/
