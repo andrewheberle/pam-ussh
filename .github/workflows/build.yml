@@ -34,8 +34,16 @@ jobs:
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           sudo apt-get -qqq update
           sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64
-          ls /usr/lib/x86_64-linux-gnu/libpam.so*
-          ls /usr/lib/aarch64-linux-gnu/libpam.so*
+          echo "Checking /usr/aarch64-linux-gnu/include/security/\*.h"
+          ls /usr/aarch64-linux-gnu/include/security/*.h || true
+          echo "Checking /usr/include/aarch64-linux-gnu/security/\*.h"
+          ls /usr/include/aarch64-linux-gnu/security/*.h || true
+          echo "Checking /usr/include/security/\*.h"
+          ls /usr/include/security/*.h || true
+          echo "Checking /usr/x86_64-linux-gnu/include/security/\*.h"
+          ls /usr/x86_64-linux-gnu/include/security/*.h || true
+          echo "Checking /usr/include/x86_64-linux-gnu/security/\*.h"
+          ls /usr/include/x86_64-linux-gnu/security/*.h || true
       - name: Build snapshot with GoReleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
