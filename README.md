@@ -28,10 +28,19 @@ on BSD.
   go build -buildmode=c-shared -o pam_ussh.so
 ```
 
+## Installing via Package
+
+```sh
+curl -fsSL https://packages.hebs.net.au/pam-ussh/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/pam-ussh.gpg
+echo "deb [signed-by=/usr/share/keyrings/pam-ussh.gpg] https://packages.hebs.net.au/pam-ussh stable main" | sudo tee /etc/apt/sources.list.d/pam-ussh.list
+sudo apt-get update
+sudo apt-get install pam-ussh
+```
+
 ## Usage
 
 1. Put this PAM module where ever PAM modules live on your system, eg.
-`/lib/security`
+`/usr/lib/security`
 
 2. Add it as an authentication method to `/etc/pam.d/sudo` (this example is
 from Ubuntu 24.04 LTS), eg.
@@ -47,7 +56,7 @@ from Ubuntu 24.04 LTS), eg.
   session    required   pam_env.so readenv=1 envfile=/etc/default/locale user_readenv=0
 
   # attempt SSH certificate based auth for sudo access
-  auth [success=done default=ignore] /lib/security/pam_ussh.so
+  auth [success=done default=ignore] /usr/lib/security/pam_ussh.so
 
   @include common-auth
   @include common-account
@@ -85,7 +94,7 @@ The certificate must be valid for at least one principal that's listed in `/etc/
 The certificate must also be valid for a principal matching the username of the target user.
 
    ```
-   auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals
+   auth [success=done default=ignore] /usr/lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals
    ```
 
 ## FAQ
@@ -96,10 +105,10 @@ The certificate must also be valid for a principal matching the username of the 
 * How do I report a security issue?
   - Please report security issues privately via GitHub
 
-* does this work with non-certificate ssh-keys?
-  - I have no plans to support non-certificate based ssh-keys
+* Does this work with non-certificate ssh-keys?
+  - I have no plans to support non-certificate based SSH-keys
 
 
-Information on ssh certificates:
+Information on SSH certificates:
 * http://cvsweb.openbsd.org/cgi-bin/cvsweb/src/usr.bin/ssh/PROTOCOL.certkeys?rev=HEAD
 * https://blog.habets.se/2011/07/OpenSSH-certificates.html
