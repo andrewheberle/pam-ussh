@@ -73,6 +73,7 @@ nfpms:
       - deb
     libdirs:
       cshared: /usr/lib/security
+    license: MIT
     dependencies:
       - libpam0g
     section: admin
