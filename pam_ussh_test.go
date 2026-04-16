@@ -187,7 +187,7 @@ func TestPamAuthorize(t *testing.T) {
 
 			// negative test with authorized_principals pam 2option
 			r = pamAuthenticate(getUID(), "foober", []string{caPamOpt,
-				fmt.Sprintf("authorized_principals=group:boober")})
+				"authorized_principals=group:boober"})
 			require.Equal(t, AuthError, r)
 
 			// positive test with authorized_principals_file pam option
