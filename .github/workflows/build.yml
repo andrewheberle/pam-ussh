@@ -28,9 +28,7 @@ jobs:
       - name: Set up build environment
         run: |
           sudo dpkg --add-architecture arm64
-          cat /etc/apt/sources.list.d/ubuntu.sources
-          sudo sed -i 's/^Architectures: .*/Architectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
-          cat /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i '/^Types: deb/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
