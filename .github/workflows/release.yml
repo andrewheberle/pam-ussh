@@ -34,6 +34,10 @@ jobs:
       - name: Set up build environment
         run: |
           sudo dpkg --add-architecture arm64
+          sudo sed -i '/^Types: deb/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           sudo apt-get -qqq update
           sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64
       - name: Release with GoReleaser
@@ -47,11 +51,5 @@ jobs:
       - name: Attest build artifacts
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
-          subject-checksums: ./client/dist/checksums.txt
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: client-dist-artifact
-          path: dist/**/*.deb
-          retention-days: 1
+          subject-checksums: ./dist/checksums.txt
 
