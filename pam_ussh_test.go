@@ -53,8 +53,14 @@ func TestLoadPrincipals(t *testing.T) {
 
 func TestNoAuthSock(t *testing.T) {
 	oldAgent := os.Getenv("SSH_AUTH_SOCK")
-	defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
-	os.Unsetenv("SSH_AUTH_SOCK")
+	defer func() {
+		if err := os.Setenv("SSH_AUTH_SOCK", oldAgent); err != nil {
+			panic(err)
+		}
+	}()
+	if err := os.Unsetenv("SSH_AUTH_SOCK"); err != nil {
+		panic(err)
+	}
 	require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 }
 
@@ -63,8 +69,14 @@ func TestBadAuthSock(t *testing.T) {
 		s := path.Join(dir, "badsock")
 
 		oldAgent := os.Getenv("SSH_AUTH_SOCK")
-		defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
-		os.Setenv("SSH_AUTH_SOCK", s)
+		defer func() {
+			if err := os.Setenv("SSH_AUTH_SOCK", oldAgent); err != nil {
+				panic(err)
+			}
+		}()
+		if err := os.Setenv("SSH_AUTH_SOCK", s); err != nil {
+			panic(err)
+		}
 		require.Equal(t, AuthError, authenticate(0, "r", "", nil))
 	})
 }
@@ -155,7 +167,9 @@ func TestPamAuthorize(t *testing.T) {
 		require.NoError(t, e)
 
 		WithSSHAgent(func(a agent.Agent) {
-			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c})
+			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
+				panic(err)
+			}
 
 			// test with missing ca file
 			r := pamAuthenticate(getUID(), "foober", []string{"ca_file=missing"})
@@ -194,7 +208,9 @@ func TestPamAuthorize(t *testing.T) {
 
 		c2 := signedCert(userPub, signer, "user", []string{"group:foober"})
 		WithSSHAgent(func(a agent.Agent) {
-			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c2})
+			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c2}); err != nil {
+				panic(err)
+			}
 
 			// test without requiring the user principal
 			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"})
@@ -237,14 +253,24 @@ func WithTempDir(fn func(dir string)) {
 		panic(err)
 	}
 
-	defer os.RemoveAll(dir)
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			panic(err)
+		}
+	}()
 	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
 
-	defer os.Chdir(cwd)
-	os.Chdir(dir)
+	defer func() {
+		if err := os.Chdir(cwd); err != nil {
+			panic(err)
+		}
+	}()
+	if err := os.Chdir(dir); err != nil {
+		panic(err)
+	}
 
 	fn(dir)
 }
@@ -254,8 +280,14 @@ func WithSSHAgent(fn func(agent.Agent)) {
 	WithTempDir(func(dir string) {
 		newAgent := path.Join(dir, "agent")
 		oldAgent := os.Getenv("SSH_AUTH_SOCK")
-		os.Setenv("SSH_AUTH_SOCK", newAgent)
-		defer os.Setenv("SSH_AUTH_SOCK", oldAgent)
+		if err := os.Setenv("SSH_AUTH_SOCK", newAgent); err != nil {
+			panic(err)
+		}
+		defer func() {
+			if err := os.Setenv("SSH_AUTH_SOCK", oldAgent); err != nil {
+				panic(err)
+			}
+		}()
 
 		l, e := net.Listen("unix", newAgent)
 		if e != nil {
@@ -269,8 +301,14 @@ func WithSSHAgent(fn func(agent.Agent)) {
 					panic(e)
 				}
 				go func() {
-					defer c.Close()
-					agent.ServeAgent(a, c)
+					defer func() {
+						if err := c.Close(); err != nil {
+							panic(err)
+						}
+					}()
+					if err := agent.ServeAgent(a, c); err != nil {
+						panic(err)
+					}
 				}()
 			}
 		}()
@@ -307,7 +345,9 @@ func TestWithWrongCA(t *testing.T) {
 		// Sign the user keypair with the wrong CA and try to verify it
 		c := signedCert(userPub, wrongSigner, "foober", []string{"group:foober"})
 		WithSSHAgent(func(a agent.Agent) {
-			a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c})
+			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
+				panic(err)
+			}
 			r := pamAuthenticate(getUID(), "foober", []string{caPamOpt})
 			require.Equal(t, AuthError, r, "authenticate succeeded when it should have failed")
 		})
