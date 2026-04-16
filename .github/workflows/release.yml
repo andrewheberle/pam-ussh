@@ -34,8 +34,8 @@ jobs:
       - name: Set up build environment
         run: |
           sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install libpam0g-dev:amd64 libpam0g-dev:arm64
+          sudo apt-get -qqq update
+          sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64
       - name: Release with GoReleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
