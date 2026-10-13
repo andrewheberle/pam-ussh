@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.6.0/schemas/config.json",
+  "release-type": "go",
+  "include-component-in-tag": false,
+  "pull-request-title-pattern": "chore(release): v${version}",
+  "packages": {
+    ".": {}
+  }
+}
