@@ -139,19 +139,28 @@ func parseArgs(username string, argv []string) (policy certauth.Policy, userCA s
 	requiredPrincipal := username
 
 	for _, arg := range argv {
-		opt := strings.Split(arg, "=")
-		switch opt[0] {
+		name, value, _ := strings.Cut(arg, "=")
+		switch name {
+		case "ca_file", "authorized_principals", "authorized_principals_file":
+			// these options require a value; fail closed rather than guess
+			if value == "" {
+				pamLog("option %s requires a value", name)
+				return certauth.Policy{}, "", fmt.Errorf("option %s requires a value", name)
+			}
+		}
+
+		switch name {
 		case "ca_file":
-			userCA = opt[1]
+			userCA = value
 			pamLog("ca_file set to %s", userCA)
 		case "group":
 			pamLog("the group option is deprecated and is ignored")
 		case "authorized_principals":
-			for _, s := range strings.Split(opt[1], ",") {
+			for _, s := range strings.Split(value, ",") {
 				authorizedPrincipals[s] = struct{}{}
 			}
 		case "authorized_principals_file":
-			ap, err := loadValidPrincipals(opt[1])
+			ap, err := loadValidPrincipals(value)
 			if err != nil {
 				pamLog("%v", err)
 				return certauth.Policy{}, "", errors.New("could not load authorized_principals_file")
@@ -160,7 +169,7 @@ func parseArgs(username string, argv []string) (policy certauth.Policy, userCA s
 		case "no_require_user_principal":
 			requiredPrincipal = ""
 		default:
-			pamLog("unknown option: %s", opt[0])
+			pamLog("unknown option: %s", name)
 		}
 	}
 
