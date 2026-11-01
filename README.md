@@ -64,6 +64,10 @@ from Ubuntu 24.04 LTS), eg.
 
 3. Make sure your `SSH_AUTH_SOCK` is available where you want to use this (eg. ssh -A user@host)
 
+Only user certificates that list at least one principal are accepted. As with `sshd`, a
+certificate signed without principals (eg. `ssh-keygen -s ca` without `-n`) and host
+certificates (`ssh-keygen -h`) are rejected.
+
 Runtime configuration options:
 * `ca_file` - string, the path to your TrustedUserCAKeys file, default `/etc/ssh/ca.pub`.
   This is the pubkey that signs your user certificates.

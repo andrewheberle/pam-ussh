@@ -43,6 +43,12 @@ var (
 	ErrNoValidCA = errors.New("no valid keys in User CA")
 	// ErrNoCertificates means the agent holds no certificates.
 	ErrNoCertificates = errors.New("no certificates loaded")
+	// ErrNotUserCertificate means a certificate is not a user certificate
+	// (eg. it is a host certificate).
+	ErrNotUserCertificate = errors.New("not a user certificate")
+	// ErrNoPrincipals means a certificate has no principals. Such a
+	// certificate would otherwise be valid for every principal.
+	ErrNoPrincipals = errors.New("certificate has no principals")
 	// ErrPrincipalMismatch means a certificate is not valid for the required
 	// principal or any of the authorized principals.
 	ErrPrincipalMismatch = errors.New("certificate not valid for policy principals")
@@ -120,6 +126,18 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 
 		cert, ok := pubKey.(*ssh.Certificate)
 		if !ok {
+			continue
+		}
+
+		if cert.CertType != ssh.UserCert {
+			rejections = append(rejections, fmt.Errorf("certificate %q: %w", cert.KeyId, ErrNotUserCertificate))
+			continue
+		}
+
+		// CheckCert treats a cert with no principals as valid for every
+		// principal; like sshd, refuse it
+		if len(cert.ValidPrincipals) == 0 {
+			rejections = append(rejections, fmt.Errorf("certificate %q: %w", cert.KeyId, ErrNoPrincipals))
 			continue
 		}
 
