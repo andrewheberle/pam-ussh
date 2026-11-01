@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,14 +12,25 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-// failingSigner is an agent whose Sign always fails, so the possession proof
-// can't succeed.
+// failingSigner is an agent that breaks the possession proof for the
+// certificates with the given key IDs: refuse makes Sign return an error and
+// corrupt makes it return a signature that doesn't verify.
 type failingSigner struct {
 	agent.Agent
+	refuse  []string
+	corrupt []string
 }
 
-func (failingSigner) Sign(ssh.PublicKey, []byte) (*ssh.Signature, error) {
-	return nil, errors.New("sign refused")
+func (f failingSigner) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
+	if cert, ok := key.(*ssh.Certificate); ok {
+		if slices.Contains(f.refuse, cert.KeyId) {
+			return nil, errors.New("sign refused")
+		}
+		if slices.Contains(f.corrupt, cert.KeyId) {
+			return &ssh.Signature{Format: ssh.KeyAlgoED25519, Blob: make([]byte, ed25519.SignatureSize)}, nil
+		}
+	}
+	return f.Agent.Sign(key, data)
 }
 
 func newSigner(t *testing.T) ssh.Signer {
@@ -76,6 +88,7 @@ func TestVerify(t *testing.T) {
 	caKeys := ssh.MarshalAuthorizedKey(ca.PublicKey())
 
 	user := newIdentity(t, ca, "user", []string{"foober", "group:foober"}, time.Minute)
+	second := newIdentity(t, ca, "second", []string{"foober"}, time.Minute)
 	other := newIdentity(t, ca, "other", []string{"user", "group:foober"}, time.Minute)
 	wrong := newIdentity(t, wrongCA, "wrong", []string{"foober", "group:foober"}, time.Minute)
 	expired := newIdentity(t, ca, "expired", []string{"foober"}, -30*time.Second)
@@ -95,7 +108,8 @@ func TestVerify(t *testing.T) {
 		caKeys     []byte
 		identities []identity
 		plainKeys  bool
-		failSign   bool
+		refuseSign []string
+		badSign    []string
 		want       Match
 		wantErr    error
 	}{
@@ -189,7 +203,7 @@ func TestVerify(t *testing.T) {
 			policy:     Policy{RequiredPrincipal: "foober", AuthorizedPrincipals: []string{"group:boober"}},
 			caKeys:     caKeys,
 			identities: []identity{user},
-			failSign:   true,
+			refuseSign: []string{"user"},
 			wantErr:    ErrPrincipalMismatch,
 		},
 		{
@@ -269,12 +283,36 @@ func TestVerify(t *testing.T) {
 			want:       Match{KeyID: "user", Serial: 1, Principal: "foober"},
 		},
 		{
-			name:       "possession proof fails",
+			name:       "agent refuses to sign",
 			policy:     Policy{RequiredPrincipal: "foober"},
 			caKeys:     caKeys,
 			identities: []identity{user},
-			failSign:   true,
+			refuseSign: []string{"user"},
 			wantErr:    ErrProofFailed,
+		},
+		{
+			name:       "signature does not verify",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{user},
+			badSign:    []string{"user"},
+			wantErr:    ErrProofFailed,
+		},
+		{
+			name:       "agent refuses to sign then valid certificate",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{user, second},
+			refuseSign: []string{"user"},
+			want:       Match{KeyID: "second", Serial: 1, Principal: "foober"},
+		},
+		{
+			name:       "signature does not verify then valid certificate",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{user, second},
+			badSign:    []string{"user"},
+			want:       Match{KeyID: "second", Serial: 1, Principal: "foober"},
 		},
 	}
 
@@ -293,8 +331,8 @@ func TestVerify(t *testing.T) {
 			}
 
 			a := keyring
-			if tt.failSign {
-				a = failingSigner{keyring}
+			if len(tt.refuseSign) > 0 || len(tt.badSign) > 0 {
+				a = failingSigner{Agent: keyring, refuse: tt.refuseSign, corrupt: tt.badSign}
 			}
 
 			got, err := Verify(tt.policy, tt.caKeys, a)

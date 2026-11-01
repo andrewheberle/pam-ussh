@@ -159,13 +159,16 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 			return Match{}, fmt.Errorf("reading random bytes: %w", err)
 		}
 
+		// a failed proof only rules out this cert; another may still succeed
 		signedData, err := a.Sign(pubKey, randBytes)
 		if err != nil {
-			return Match{}, fmt.Errorf("certificate %q: %w: signing: %w", cert.KeyId, ErrProofFailed, err)
+			rejections = append(rejections, fmt.Errorf("certificate %q: %w: signing: %w", cert.KeyId, ErrProofFailed, err))
+			continue
 		}
 
 		if err := pubKey.Verify(randBytes, signedData); err != nil {
-			return Match{}, fmt.Errorf("certificate %q: %w: verifying signature: %w", cert.KeyId, ErrProofFailed, err)
+			rejections = append(rejections, fmt.Errorf("certificate %q: %w: verifying signature: %w", cert.KeyId, ErrProofFailed, err))
+			continue
 		}
 
 		return Match{KeyID: cert.KeyId, Serial: cert.Serial, Principal: principal}, nil
