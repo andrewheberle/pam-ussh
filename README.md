@@ -15,17 +15,22 @@ using your SSH certificate, because if you're using it for this, you're probably
 as well). At that point when you want to run a command that requires authentication (eg.
 `sudo`), you can use pam-ussh for authentication.
 
-Works on Linux and OSX. BSD doesn't work because Go doesn't (yet) support `buildmode=c-shared`
-on BSD.
+Built and packaged for Linux (amd64 and arm64). The build tags also allow macOS, but it is
+untested there.
 
 ## Building
 
-1. Clone the repo and compile:
+Building needs Go, a C compiler and the PAM development headers (eg. `gcc` and `libpam0g-dev`
+on Debian/Ubuntu), with cgo enabled:
+
 ```sh
-  git clone https://github.com/andrewheberle/pam-ussh.git
-  cd pam-ussh
-  go build -buildmode=c-shared -o pam_ussh.so
+git clone https://github.com/andrewheberle/pam-ussh.git
+cd pam-ussh
+CGO_ENABLED=1 go build -buildmode=c-shared -o pam_ussh.so
+sudo install -D -m 0644 pam_ussh.so /usr/lib/security/pam_ussh.so
 ```
+
+`go build` also writes a C header, `pam_ussh.h`, which isn't needed and can be deleted.
 
 ## Installing via Package
 
@@ -36,10 +41,15 @@ sudo apt-get update
 sudo apt-get install pam-ussh
 ```
 
+Packages are published for amd64 and arm64. The package installs the module to
+`/usr/lib/security/pam_ussh.so`; it doesn't change any PAM configuration (see Usage).
+
 ## Usage
 
-1. Put this PAM module where ever PAM modules live on your system, eg.
-`/usr/lib/security`
+1. Install the module, either from the package or by building it (see above). Both put it at
+`/usr/lib/security/pam_ussh.so`. That directory isn't on PAM's default module path on Debian and
+Ubuntu (which use `/usr/lib/<arch>-linux-gnu/security`), so refer to the module by its full path
+in PAM configuration.
 
 2. Add it as an authentication method to `/etc/pam.d/sudo` (this example is
 from Ubuntu 24.04 LTS), eg.
@@ -82,8 +92,9 @@ Runtime configuration options:
   If this and `authorized_principals` are both set, only the last option listed is checked.
 
 * `no_require_user_principal` - flag, true if present
-  If set, certificates do not have to be valid for a principal matching the local user in addition
-  to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
+  If set, certificates do not have to be valid for a principal matching the user running `sudo` in
+  addition to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
+  It must be combined with one of those options; on its own, every authentication fails.
 
 * `agent_timeout` - duration, how long to wait for the ssh-agent, default `30s`.
   A Go duration such as `10s` or `1m30s`; `0` waits indefinitely. This covers the whole exchange
@@ -113,15 +124,17 @@ level=WARN msg="authentication failed" user=alice uid=1000 err="no valid certifi
 
 ## Example configuration
 
+Each example is a line for `/etc/pam.d/sudo`, placed before `@include common-auth` as shown in Usage.
+
 1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.
 The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
    ```
-   auth [success=done default=ignore] /lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals no_require_user_principal
+   auth [success=done default=ignore] /usr/lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals no_require_user_principal
    ```
 
 2. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.
 The certificate must be valid for at least one principal that's listed in `/etc/ssh/sudo_principals`.
-The certificate must also be valid for a principal matching the username of the target user.
+The certificate must also be valid for a principal matching the username of the user running `sudo`.
 
    ```
    auth [success=done default=ignore] /usr/lib/security/pam_ussh.so ca_file=/etc/ssh/ca.pub authorized_principals_file=/etc/ssh/sudo_principals
