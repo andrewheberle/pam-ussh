@@ -1,8 +1,9 @@
-name: Build
+name: build
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - 'main'
   pull_request:
 
 permissions: {}
@@ -21,8 +22,7 @@ jobs:
         with:
           go-version: stable
           cache: true
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
       - name: Set up build environment
         run: |
           sudo dpkg --add-architecture arm64
@@ -32,19 +32,8 @@ jobs:
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
           sudo apt-get -qqq update
           sudo apt-get -qqqy install libpam0g-dev:amd64 libpam0g-dev:arm64 gcc-aarch64-linux-gnu
-      - name: Build snapshot with GoReleaser
-        uses: goreleaser/goreleaser-action@e24998b8b67b290c2fa8b7c14fcfa7de2c5c9b8c # v7.1.0
+      - uses: goreleaser/goreleaser-action@e24998b8b67b290c2fa8b7c14fcfa7de2c5c9b8c # v7.1.0
         with:
           distribution: goreleaser
           version: "~> v2"
           args: release --clean --snapshot --skip sign
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dist-artifact
-          path: |
-            dist/checksums.txt
-            dist/**/*.deb
-            dist/**/*.tar.gz
-            dist/**/*.sbom.json
-          retention-days: 1

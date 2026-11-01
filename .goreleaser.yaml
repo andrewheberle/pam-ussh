@@ -37,13 +37,16 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
+# Release notes and CHANGELOG.md are written by release-please, which also
+# creates the GitHub release that GoReleaser adds the artifacts to
 changelog:
-  use: github-native
+  disable: true
 
 checksum:
   name_template: "checksums.txt"
 
 release:
+  mode: keep-existing
   draft: false
   make_latest: true
   replace_existing_artifacts: true

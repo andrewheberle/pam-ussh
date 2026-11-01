@@ -55,10 +55,7 @@ jobs:
         with:
           name: dist-artifact
           path: |
-            dist/checksums.txt
             dist/**/*.deb
-            dist/**/*.tar.gz
-            dist/**/*.sbom.json
           retention-days: 1
 
   repo:
