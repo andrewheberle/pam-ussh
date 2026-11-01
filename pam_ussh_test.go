@@ -104,6 +104,12 @@ func TestBadAuthSock(t *testing.T) {
 }
 
 func TestParseArgs(t *testing.T) {
+	principalsFile := path.Join(t.TempDir(), "principals")
+	if err := os.WriteFile(principalsFile, []byte("group:file1\ngroup:file2\n"), 0444); err != nil {
+		t.Fatal(err)
+	}
+	principalsFileOpt := "authorized_principals_file=" + principalsFile
+
 	tests := []struct {
 		name       string
 		username   string
@@ -125,6 +131,10 @@ func TestParseArgs(t *testing.T) {
 		{"authorized_principals without value", "testuser", []string{"authorized_principals"}, true, certauth.Policy{}, ""},
 		{"authorized_principals with empty value", "testuser", []string{"authorized_principals="}, true, certauth.Policy{}, ""},
 		{"authorized_principals_file without value", "testuser", []string{"authorized_principals_file"}, true, certauth.Policy{}, ""},
+		{"authorized_principals_file", "testuser", []string{principalsFileOpt}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"group:file1", "group:file2"}}, defaultUserCA},
+		{"authorized_principals after authorized_principals_file wins", "testuser", []string{principalsFileOpt, "authorized_principals=admin1"}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"admin1"}}, defaultUserCA},
+		{"authorized_principals_file after authorized_principals wins", "testuser", []string{"authorized_principals=admin1", principalsFileOpt}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"group:file1", "group:file2"}}, defaultUserCA},
+		{"repeated authorized_principals last wins", "testuser", []string{"authorized_principals=admin1,admin2", "authorized_principals=admin3"}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"admin3"}}, defaultUserCA},
 	}
 
 	for _, tt := range tests {

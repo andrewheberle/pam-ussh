@@ -75,6 +75,7 @@ Runtime configuration options:
 * `authorized_principals` - string, comma separated list of authorized principals, default `""`.
   If set, the user needs to have a principal in this list in order to use this module. If
   this and `authorized_principals_file` are both set, only the last option listed is checked.
+  Likewise, if it is given more than once, only the last list is used.
 
 * `authorized_principals_file` - string, path to an authorized_principals file, default `""`.
   If set, users need to have a principal listed in this file in order to use this module.
