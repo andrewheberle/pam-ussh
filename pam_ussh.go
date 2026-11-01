@@ -63,22 +63,13 @@ const (
 // newLogger returns a logger writing to syslog and a func that closes the
 // syslog connection. If syslog can't be opened, log records are discarded.
 func newLogger() (*slog.Logger, func()) {
+	// the handler sets the severity per record; only the facility applies
 	w, err := syslog.New(syslog.LOG_AUTH|syslog.LOG_WARNING, "pam-ussh")
 	if err != nil {
 		return slog.New(slog.DiscardHandler), func() {}
 	}
 
-	h := slog.NewTextHandler(w, &slog.HandlerOptions{
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// syslog adds its own timestamp
-			if len(groups) == 0 && a.Key == slog.TimeKey {
-				return slog.Attr{}
-			}
-			return a
-		},
-	})
-
-	return slog.New(h), func() { _ = w.Close() }
+	return slog.New(newSyslogHandler(w)), func() { _ = w.Close() }
 }
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
