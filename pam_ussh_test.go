@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andrewheberle/pam-ussh/internal/certauth"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -65,7 +66,7 @@ func TestNoAuthSock(t *testing.T) {
 	if err := os.Unsetenv("SSH_AUTH_SOCK"); err != nil {
 		panic(err)
 	}
-	got := authenticate(0, "r", "", nil)
+	got := authenticate(0, certauth.Policy{RequiredPrincipal: "r"}, "")
 	if got != AuthError {
 		t.Errorf("authenticate(): got %v want %v", got, AuthError)
 	}
@@ -84,108 +85,61 @@ func TestBadAuthSock(t *testing.T) {
 		if err := os.Setenv("SSH_AUTH_SOCK", s); err != nil {
 			panic(err)
 		}
-		got := authenticate(0, "r", "", nil)
+		got := authenticate(0, certauth.Policy{RequiredPrincipal: "r"}, "")
 		if got != AuthError {
 			t.Errorf("authenticate(): got %v want %v", got, AuthError)
 		}
 	})
 }
 
-func TestBadCA(t *testing.T) {
-	WithTempDir(func(dir string) {
-		ca := path.Join(dir, "badca")
-		WithSSHAgent(func(a agent.Agent) {
-			k, err := rsa.GenerateKey(rand.Reader, 2048)
-			if err != nil {
-				panic(err)
-			}
-			if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
-				panic(err)
-			}
-			got := authenticate(0, "", ca, nil)
-			if got != AuthError {
-				t.Errorf("authenticate(): got %v want %v", got, AuthError)
-			}
-		})
-	})
-}
-
-func TestAuthorize_NoKeys(t *testing.T) {
-	WithTempDir(func(dir string) {
-		p := map[string]struct{}{"group:t": {}}
-
-		ca := path.Join(dir, "ca")
-		k, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			panic(err)
-		}
-		pub, err := ssh.NewPublicKey(&k.PublicKey)
-		if err != nil {
-			panic(err)
-		}
-		if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444); err != nil {
-			panic(err)
-		}
-
-		WithSSHAgent(func(a agent.Agent) {
-			got := authenticate(0, "", ca, p)
-			if got != AuthError {
-				t.Errorf("authenticate(): got %v want %v", got, AuthError)
-			}
-		})
-	})
-}
-
 func TestParseArgs(t *testing.T) {
 	tests := []struct {
-		name                     string
-		username                 string
-		args                     []string
-		wantErr                  bool
-		wantRequiredPrincipal    string
-		wantUserCA               string
-		wantAuthorizedPrincipals map[string]struct{}
+		name       string
+		username   string
+		args       []string
+		wantErr    bool
+		wantPolicy certauth.Policy
+		wantUserCA string
 	}{
-		{"defaults", "testuser", []string{}, false, "testuser", defaultUserCA, map[string]struct{}{}},
-		{"defaults with unknown option", "testuser", []string{"some_unknown_setting"}, false, "testuser", defaultUserCA, map[string]struct{}{}},
-		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, "testuser", "/etc/ssh_ca.pub", map[string]struct{}{}},
-		{"alternate group", "testuser", []string{"group=testgroup"}, false, "testuser", defaultUserCA, map[string]struct{}{}},
-		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, "", defaultUserCA, map[string]struct{}{}},
-		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin1,admin2,admin3"}, false, "testuser", defaultUserCA, map[string]struct{}{"admin1": {}, "admin2": {}, "admin3": {}}},
-		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, "", defaultUserCA, map[string]struct{}{}},
+		{"defaults", "testuser", []string{}, false, certauth.Policy{RequiredPrincipal: "testuser"}, defaultUserCA},
+		{"defaults with unknown option", "testuser", []string{"some_unknown_setting"}, false, certauth.Policy{RequiredPrincipal: "testuser"}, defaultUserCA},
+		{"alternate ca", "testuser", []string{"ca_file=/etc/ssh_ca.pub"}, false, certauth.Policy{RequiredPrincipal: "testuser"}, "/etc/ssh_ca.pub"},
+		{"alternate group", "testuser", []string{"group=testgroup"}, false, certauth.Policy{RequiredPrincipal: "testuser"}, defaultUserCA},
+		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, certauth.Policy{}, defaultUserCA},
+		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin3,admin1,admin2"}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"admin1", "admin2", "admin3"}}, defaultUserCA},
+		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, certauth.Policy{}, ""},
 	}
 
 	for _, tt := range tests {
-		required_principal, userCA, authorizedPrincipals, err := parseArgs(tt.username, tt.args)
-		if tt.wantErr {
-			if err == nil {
-				t.Fatalf("%s: succeeded unexpectededly", tt.name)
+		t.Run(tt.name, func(t *testing.T) {
+			policy, userCA, err := parseArgs(tt.username, tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("succeeded unexpectedly")
+				}
+				return
 			}
-		} else {
 			if err != nil {
-				t.Fatalf("%s: failed unexpectededly", tt.name)
+				t.Fatalf("failed unexpectedly: %v", err)
 			}
 
-			if tt.wantRequiredPrincipal != required_principal {
-				t.Errorf("%s: required_principal got %v want %v", tt.name, required_principal, tt.wantRequiredPrincipal)
+			if !reflect.DeepEqual(tt.wantPolicy, policy) {
+				t.Errorf("policy got %+v want %+v", policy, tt.wantPolicy)
 			}
 
 			if tt.wantUserCA != userCA {
-				t.Errorf("%s: userCA got %v want %v", tt.name, userCA, tt.wantUserCA)
+				t.Errorf("userCA got %v want %v", userCA, tt.wantUserCA)
 			}
-
-			if !reflect.DeepEqual(tt.wantAuthorizedPrincipals, authorizedPrincipals) {
-				t.Errorf("%s: authorizedPrincipals got %v want %v", tt.name, authorizedPrincipals, tt.wantAuthorizedPrincipals)
-			}
-		}
+		})
 	}
 }
 
+// TestPamAuthorize covers the plumbing around certauth.Verify; the
+// certificate rules themselves are tested in internal/certauth.
 func TestPamAuthorize(t *testing.T) {
 	WithTempDir(func(dir string) {
 		ca := path.Join(dir, "ca")
 		caPamOpt := fmt.Sprintf("ca_file=%s", ca)
-		principals := path.Join(dir, "principals")
 
 		k, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -209,10 +163,6 @@ func TestPamAuthorize(t *testing.T) {
 		}
 		c := signedCert(userPub, signer, "foober", []string{"group:foober"})
 
-		if err := os.WriteFile(principals, []byte("group:foober"), 0444); err != nil {
-			panic(err)
-		}
-
 		WithSSHAgent(func(a agent.Agent) {
 			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
 				panic(err)
@@ -222,42 +172,21 @@ func TestPamAuthorize(t *testing.T) {
 
 			tests := []struct {
 				name     string
-				uid      int
 				username string
 				argv     []string
 				want     AuthResult
 			}{
-				{"test missing ca file fails", uid, "foober", []string{"ca_file=missing"}, AuthError},
-				{"no principal", uid, "foober", []string{caPamOpt}, AuthSuccess},
-				{"test that the wrong principal fails", uid, "duber", []string{caPamOpt}, AuthError},
-				{"negative test with authorized_principals pam 2option", uid, "foober", []string{caPamOpt, "authorized_principals=group:boober"}, AuthError},
-				{"positive test with authorized_principals_file pam option", uid, "foober", []string{caPamOpt, fmt.Sprintf("authorized_principals_file=%s", principals)}, AuthSuccess},
-				{"negative test with a bad authorized_principals_file pam option", uid, "foober", []string{caPamOpt, "authorized_principals_file=foober"}, AuthError},
-				{"test that a user not in the required group passes (deprecated option)", uid, "foober", []string{caPamOpt, "group=nosuchgroup"}, AuthSuccess},
+				{"missing ca file fails", "foober", []string{"ca_file=missing"}, AuthError},
+				{"valid certificate succeeds", "foober", []string{caPamOpt}, AuthSuccess},
+				{"bad authorized_principals_file fails", "foober", []string{caPamOpt, "authorized_principals_file=foober"}, AuthError},
 			}
 
 			for _, tt := range tests {
-				got := pamAuthenticate(tt.uid, tt.username, tt.argv)
-				if got != tt.want {
-					t.Errorf("authenticate(): got %v want %v", got, tt.want)
-				}
-			}
-		})
-
-		c2 := signedCert(userPub, signer, "user", []string{"group:foober"})
-		WithSSHAgent(func(a agent.Agent) {
-			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c2}); err != nil {
-				panic(err)
-			}
-
-			// test without requiring the user principal
-			if r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "no_require_user_principal", "authorized_principals=group:foober"}); r != AuthSuccess {
-				t.Error("authenticate() failed unexpectedly despite no_require_user_principal")
-			}
-
-			// test without requiring the user principal
-			if r := pamAuthenticate(getUID(), "foober", []string{caPamOpt, "authorized_principals=group:foober"}); r != AuthError {
-				t.Error("authenticate() succeeded unexpectedly despite no_require_user_principal not set")
+				t.Run(tt.name, func(t *testing.T) {
+					if got := pamAuthenticate(uid, tt.username, tt.argv); got != tt.want {
+						t.Errorf("pamAuthenticate(): got %v want %v", got, tt.want)
+					}
+				})
 			}
 		})
 	})
@@ -350,57 +279,5 @@ func WithSSHAgent(fn func(agent.Agent)) {
 		}()
 
 		fn(a)
-	})
-}
-
-func TestWithWrongCA(t *testing.T) {
-	WithTempDir(func(dir string) {
-		ca := path.Join(dir, "ca")
-		caPamOpt := fmt.Sprintf("ca_file=%s", ca)
-
-		// The correct CA is written to file for the pamAuthenticate function
-		correctCAKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			panic(err)
-		}
-		correctCAPub, err := ssh.NewPublicKey(&correctCAKey.PublicKey)
-		if err != nil {
-			panic(err)
-		}
-		if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(correctCAPub), 0444); err != nil {
-			panic(err)
-		}
-
-		// The wrong CA is just used for signing the certificate
-		wrongCAKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			panic(err)
-		}
-		wrongSigner, err := ssh.NewSignerFromKey(wrongCAKey)
-		if err != nil {
-			panic(err)
-		}
-
-		// Generate a user keypair
-		userPriv, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			panic(err)
-		}
-		userPub, err := ssh.NewPublicKey(&userPriv.PublicKey)
-		if err != nil {
-			panic(err)
-		}
-
-		// Sign the user keypair with the wrong CA and try to verify it
-		c := signedCert(userPub, wrongSigner, "foober", []string{"group:foober"})
-		WithSSHAgent(func(a agent.Agent) {
-			if err := a.Add(agent.AddedKey{PrivateKey: userPriv, Certificate: c}); err != nil {
-				panic(err)
-			}
-			got := pamAuthenticate(getUID(), "foober", []string{caPamOpt})
-			if got != AuthError {
-				t.Error("authenticate succeeded when it should have failed")
-			}
-		})
 	})
 }
