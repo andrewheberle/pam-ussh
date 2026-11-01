@@ -167,12 +167,24 @@ func TestVerify(t *testing.T) {
 			wantErr:    ErrUnknownAuthority,
 		},
 		{
-			// See https://github.com/andrewheberle/pam-ussh/issues/53
 			name:       "CA with no valid keys",
 			policy:     Policy{RequiredPrincipal: "foober"},
 			caKeys:     []byte("not a key\n"),
 			identities: []identity{user},
-			wantErr:    ErrUnknownAuthority,
+			wantErr:    ErrNoValidCA,
+		},
+		{
+			name:       "empty CA",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     []byte{},
+			identities: []identity{user},
+			wantErr:    ErrNoValidCA,
+		},
+		{
+			name:    "empty CA reported before empty agent",
+			policy:  Policy{RequiredPrincipal: "foober"},
+			caKeys:  []byte{},
+			wantErr: ErrNoValidCA,
 		},
 		{
 			name:       "CA with a bad line before a good key",

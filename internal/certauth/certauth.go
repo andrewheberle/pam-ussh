@@ -39,6 +39,8 @@ var (
 	// ErrEmptyPolicy means the Policy has neither a required principal nor
 	// any authorized principals.
 	ErrEmptyPolicy = errors.New("no required principal and no authorized principals")
+	// ErrNoValidCA means the User CA contains no valid public keys.
+	ErrNoValidCA = errors.New("no valid keys in User CA")
 	// ErrNoCertificates means the agent holds no certificates.
 	ErrNoCertificates = errors.New("no certificates loaded")
 	// ErrPrincipalMismatch means a certificate is not valid for the required
@@ -80,6 +82,11 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 		return Match{}, ErrEmptyPolicy
 	}
 
+	caPubkeys := parseCAKeys(caKeys)
+	if len(caPubkeys) == 0 {
+		return Match{}, ErrNoValidCA
+	}
+
 	keys, err := a.List()
 	if err != nil {
 		return Match{}, fmt.Errorf("listing keys: %w", err)
@@ -88,7 +95,6 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 		return Match{}, ErrNoCertificates
 	}
 
-	caPubkeys := parseCAKeys(caKeys)
 	c := &ssh.CertChecker{
 		IsUserAuthority: func(auth ssh.PublicKey) bool {
 			for _, k := range caPubkeys {
