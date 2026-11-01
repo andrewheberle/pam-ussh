@@ -83,6 +83,16 @@ Runtime configuration options:
 `ca_file`, `authorized_principals` and `authorized_principals_file` require a value (eg. `ca_file=/etc/ssh/ca.pub`).
 If any of them is given without one, authentication fails. Unknown options are logged and ignored.
 
+## Logging
+
+The module logs to syslog with the `auth` facility, `warning` priority and the tag `pam-ussh`.
+Each line is a set of `key=value` pairs, for example:
+
+```
+level=INFO msg="authentication succeeded" user=alice uid=1000 principal=alice key_id=alice@example serial=42
+level=WARN msg="authentication failed" user=alice uid=1000 err="no valid certificates: ..."
+```
+
 ## Example configuration
 
 1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.

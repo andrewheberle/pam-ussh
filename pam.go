@@ -44,7 +44,9 @@ import "C"
 
 func init() {
 	if !disablePtrace() {
-		pamLog("unable to disable ptrace")
+		logger, closeLog := newLogger()
+		logger.Error("unable to disable ptrace")
+		closeLog()
 	}
 }
 
@@ -71,7 +73,10 @@ func pam_sm_authenticate(pamh *C.pam_handle_t, flags, argc C.int, argv **C.char)
 		return C.PAM_USER_UNKNOWN
 	}
 
-	r := pamAuthenticate(uid, C.GoString(cUsername), sliceFromArgv(argc, argv))
+	logger, closeLog := newLogger()
+	defer closeLog()
+
+	r := pamAuthenticate(logger, uid, C.GoString(cUsername), sliceFromArgv(argc, argv))
 	if r == AuthError {
 		return C.PAM_AUTH_ERR
 	}

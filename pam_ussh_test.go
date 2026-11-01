@@ -24,13 +24,16 @@ THE SOFTWARE.
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +49,7 @@ func TestLoadPrincipals(t *testing.T) {
 			panic(err)
 		}
 
-		r, err := loadValidPrincipals(p)
+		r, err := loadValidPrincipals(slog.New(slog.DiscardHandler), p)
 		if err != nil {
 			t.Fatal("loadValidPrincipals(): failed unexpectedly")
 		}
@@ -66,9 +69,13 @@ func TestNoAuthSock(t *testing.T) {
 	if err := os.Unsetenv("SSH_AUTH_SOCK"); err != nil {
 		panic(err)
 	}
-	got := authenticate(0, certauth.Policy{RequiredPrincipal: "r"}, "")
+	logger, logs := newTestLogger()
+	got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "")
 	if got != AuthError {
 		t.Errorf("authenticate(): got %v want %v", got, AuthError)
+	}
+	if want := `msg="no SSH_AUTH_SOCK"`; !strings.Contains(logs.String(), want) {
+		t.Errorf("logs %q do not contain %q", logs.String(), want)
 	}
 }
 
@@ -85,9 +92,13 @@ func TestBadAuthSock(t *testing.T) {
 		if err := os.Setenv("SSH_AUTH_SOCK", s); err != nil {
 			panic(err)
 		}
-		got := authenticate(0, certauth.Policy{RequiredPrincipal: "r"}, "")
+		logger, logs := newTestLogger()
+		got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "")
 		if got != AuthError {
 			t.Errorf("authenticate(): got %v want %v", got, AuthError)
+		}
+		if want := `msg="connecting to agent failed"`; !strings.Contains(logs.String(), want) {
+			t.Errorf("logs %q do not contain %q", logs.String(), want)
 		}
 	})
 }
@@ -118,7 +129,7 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			policy, userCA, err := parseArgs(tt.username, tt.args)
+			policy, userCA, err := parseArgs(slog.New(slog.DiscardHandler), tt.username, tt.args)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("succeeded unexpectedly")
@@ -181,21 +192,39 @@ func TestPamAuthorize(t *testing.T) {
 				username string
 				argv     []string
 				want     AuthResult
+				wantLogs []string
 			}{
-				{"missing ca file fails", "foober", []string{"ca_file=missing"}, AuthError},
-				{"valid certificate succeeds", "foober", []string{caPamOpt}, AuthSuccess},
-				{"bad authorized_principals_file fails", "foober", []string{caPamOpt, "authorized_principals_file=foober"}, AuthError},
+				{"missing ca file fails", "foober", []string{"ca_file=missing"}, AuthError,
+					[]string{"level=WARN", `msg="reading CA file failed"`, "user=foober", "ca_file=missing", "err="}},
+				{"valid certificate succeeds", "foober", []string{caPamOpt}, AuthSuccess,
+					[]string{"level=INFO", `msg="authentication succeeded"`, "user=foober", fmt.Sprintf("uid=%d", uid), "principal=foober", "serial=1"}},
+				{"wrong principal fails", "duber", []string{caPamOpt}, AuthError,
+					[]string{"level=WARN", `msg="authentication failed"`, "user=duber", "err="}},
+				{"bad authorized_principals_file fails", "foober", []string{caPamOpt, "authorized_principals_file=foober"}, AuthError,
+					[]string{"level=WARN", `msg="could not load authorized_principals_file"`, "path=foober"}},
 			}
 
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
-					if got := pamAuthenticate(uid, tt.username, tt.argv); got != tt.want {
+					logger, logs := newTestLogger()
+					if got := pamAuthenticate(logger, uid, tt.username, tt.argv); got != tt.want {
 						t.Errorf("pamAuthenticate(): got %v want %v", got, tt.want)
+					}
+					for _, want := range tt.wantLogs {
+						if !strings.Contains(logs.String(), want) {
+							t.Errorf("logs %q do not contain %q", logs.String(), want)
+						}
 					}
 				})
 			}
 		})
 	})
+}
+
+// newTestLogger returns a logger writing text records to the returned buffer.
+func newTestLogger() (*slog.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
 }
 
 func signedCert(pubKey ssh.PublicKey, signer ssh.Signer, u string, p []string) *ssh.Certificate {
