@@ -20,7 +20,7 @@ builds:
       - linux
     mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
-      - -s -w -X main.Date={{ .CommitDate }}
+      - -s -w
     buildmode: c-shared
 
 archives:
@@ -76,6 +76,11 @@ nfpms:
       - deb
     libdirs:
       cshared: /usr/lib/security
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/pam-ussh/copyright
+        file_info:
+          mode: 0644
     license: MIT
     dependencies:
       - libpam0g
