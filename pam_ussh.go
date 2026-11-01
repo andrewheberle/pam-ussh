@@ -170,7 +170,7 @@ func parseArgs(logger *slog.Logger, username string, argv []string) (policy cert
 		case "group":
 			logger.Warn("deprecated option ignored", "option", name)
 		case "authorized_principals":
-			for _, s := range strings.Split(value, ",") {
+			for s := range strings.SplitSeq(value, ",") {
 				authorizedPrincipals[s] = struct{}{}
 			}
 		case "authorized_principals_file":
