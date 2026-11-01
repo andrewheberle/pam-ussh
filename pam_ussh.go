@@ -27,17 +27,17 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/syslog"
+	"maps"
 	"net"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
-	"golang.org/x/crypto/ssh"
+	"github.com/andrewheberle/pam-ussh/internal/certauth"
 	"golang.org/x/crypto/ssh/agent"
 )
 
@@ -63,51 +63,9 @@ func pamLog(format string, args ...interface{}) {
 	_ = l.Warning(fmt.Sprintf(format, args...))
 }
 
-type Agent struct {
-	conn  net.Conn
-	agent agent.ExtendedAgent
-	keys  []*agent.Key
-}
-
-func NewAgent(sock string) (*Agent, error) {
-	conn, err := net.Dial("unix", sock)
-	if err != nil {
-		return nil, err
-	}
-
-	agent := agent.NewClient(conn)
-	keys, err := agent.List()
-	if err != nil {
-		return nil, fmt.Errorf("error listing keys: %v", err)
-	}
-
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no certs loaded")
-	}
-
-	return &Agent{conn, agent, keys}, nil
-}
-
-func (agent *Agent) Close() error {
-	return agent.conn.Close()
-}
-
-func (agent *Agent) Keys() []*agent.Key {
-	return agent.keys
-}
-
-func (agent *Agent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
-	return agent.agent.Sign(key, data)
-}
-
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
-func authenticate(uid int, required_principal string, ca string, principals map[string]struct{}) AuthResult {
-	if len(principals) == 0 && len(required_principal) == 0 {
-		pamLog("requesting to authenticate with no required_principal and no principals")
-		return AuthError
-	}
-
+func authenticate(uid int, policy certauth.Policy, ca string) AuthResult {
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
 		pamLog("no SSH_AUTH_SOCK")
@@ -129,13 +87,13 @@ func authenticate(uid int, required_principal string, ca string, principals map[
 		}()
 	}
 
-	agent, err := NewAgent(authSock)
+	conn, err := net.Dial("unix", authSock)
 	if err != nil {
 		pamLog("error: %v", err)
 		return AuthError
 	}
 	defer func() {
-		if err := agent.Close(); err != nil {
+		if err := conn.Close(); err != nil {
 			pamLog("error closing agent conn: %v", err)
 		}
 	}()
@@ -146,109 +104,14 @@ func authenticate(uid int, required_principal string, ca string, principals map[
 		return AuthError
 	}
 
-	var caPubkeys []ssh.PublicKey
-	in := caBytes
-	for {
-		pubKey, _, _, rest, err := ssh.ParseAuthorizedKey(in)
-		if err != nil {
-			pamLog("skipping bad public key: %v", err)
-		} else {
-			caPubkeys = append(caPubkeys, pubKey)
-		}
-		if len(rest) == 0 {
-			break
-		}
-		in = rest
+	match, err := certauth.Verify(policy, caBytes, agent.NewClient(conn))
+	if err != nil {
+		pamLog("authentication failed: %v", err)
+		return AuthError
 	}
 
-	c := &ssh.CertChecker{
-		IsUserAuthority: func(auth ssh.PublicKey) bool {
-			for _, k := range caPubkeys {
-				if bytes.Equal(auth.Marshal(), k.Marshal()) {
-					return true
-				}
-			}
-			return false
-		},
-	}
-
-	keys := agent.Keys()
-	for idx := range keys {
-		pubKey, err := ssh.ParsePublicKey(keys[idx].Marshal())
-		if err != nil {
-			continue
-		}
-
-		cert, ok := pubKey.(*ssh.Certificate)
-		if !ok {
-			continue
-		}
-
-		certValidFor := ""
-		// Optionally, we may require that the cert be valid for a
-		// required_principal, typically the local username
-		if len(required_principal) > 0 {
-			if err := c.CheckCert(required_principal, cert); err != nil {
-				pamLog("certificate not valid for required principal")
-				continue
-			}
-			certValidFor = required_principal
-		}
-
-		// If `principals` is non-empty, the cert must be valid for at least one of `principals`
-		if len(principals) > 0 {
-			for p := range principals {
-				if err := c.CheckCert(p, cert); err != nil {
-					continue
-				}
-				certValidFor = p
-				break
-			}
-			if len(certValidFor) == 0 {
-				continue
-			}
-		}
-
-		if !c.IsUserAuthority(cert.SignatureKey) {
-			pamLog("certificate signed by unrecognized authority")
-			continue
-		}
-
-		// for the ssh agent to sign some data validating that they do in fact
-		// have the private key
-		randBytes := make([]byte, 32)
-		if _, err := rand.Read(randBytes); err != nil {
-			pamLog("error grabbing random bytes: %v", err)
-			return AuthError
-		}
-
-		signedData, err := agent.Sign(pubKey, randBytes)
-		if err != nil {
-			pamLog("error signing data: %v", err)
-			return AuthError
-		}
-
-		if err := pubKey.Verify(randBytes, signedData); err != nil {
-			pamLog("signature verification failed: %v", err)
-			return AuthError
-		}
-
-		if len(principals) == 0 {
-			pamLog("authentication succeeded for %q (cert %q, %d)",
-				certValidFor, cert.KeyId, cert.Serial)
-			return AuthSuccess
-		}
-
-		for _, p := range cert.ValidPrincipals {
-			if _, ok := principals[p]; ok {
-				pamLog("authentication succeeded for %q. Matched principal %q (cert %q, %d)",
-					cert.ValidPrincipals[0], p, cert.KeyId, cert.Serial)
-				return AuthSuccess
-			}
-		}
-	}
-	pamLog("no valid certs found")
-	return AuthError
+	pamLog("authentication succeeded for %q (cert %q, %d)", match.Principal, match.KeyID, match.Serial)
+	return AuthSuccess
 }
 
 func loadValidPrincipals(principals string) (map[string]struct{}, error) {
@@ -270,10 +133,10 @@ func loadValidPrincipals(principals string) (map[string]struct{}, error) {
 	return p, nil
 }
 
-func parseArgs(username string, argv []string) (required_principal, userCA string, authorizedPrincipals map[string]struct{}, err error) {
+func parseArgs(username string, argv []string) (policy certauth.Policy, userCA string, err error) {
 	userCA = defaultUserCA
-	authorizedPrincipals = make(map[string]struct{})
-	required_principal = username
+	authorizedPrincipals := make(map[string]struct{})
+	requiredPrincipal := username
 
 	for _, arg := range argv {
 		opt := strings.Split(arg, "=")
@@ -291,29 +154,34 @@ func parseArgs(username string, argv []string) (required_principal, userCA strin
 			ap, err := loadValidPrincipals(opt[1])
 			if err != nil {
 				pamLog("%v", err)
-				return "", "", nil, errors.New("could not load authorized_principals_file")
+				return certauth.Policy{}, "", errors.New("could not load authorized_principals_file")
 			}
 			authorizedPrincipals = ap
 		case "no_require_user_principal":
-			required_principal = ""
+			requiredPrincipal = ""
 		default:
 			pamLog("unknown option: %s", opt[0])
 		}
 	}
 
-	return required_principal, userCA, authorizedPrincipals, nil
+	policy = certauth.Policy{
+		RequiredPrincipal:    requiredPrincipal,
+		AuthorizedPrincipals: slices.Sorted(maps.Keys(authorizedPrincipals)),
+	}
+
+	return policy, userCA, nil
 }
 
 func pamAuthenticate(uid int, username string, argv []string) AuthResult {
 	runtime.GOMAXPROCS(1)
 
 	// parse args
-	required_principal, userCA, authorizedPrincipals, err := parseArgs(username, argv)
+	policy, userCA, err := parseArgs(username, argv)
 	if err != nil {
 		return AuthError
 	}
 
-	return authenticate(uid, required_principal, userCA, authorizedPrincipals)
+	return authenticate(uid, policy, userCA)
 }
 
 func main() {}

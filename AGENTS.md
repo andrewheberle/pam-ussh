@@ -19,7 +19,7 @@ Run these before considering any change complete:
 - Go version: [1.26], per `go.mod`. Don't bump it unless asked.
 - Logging: use `log/slog` with structured key/value attributes. No `fmt.Println` or `log.Printf` in service code.
 - Errors: wrap with `fmt.Errorf("doing x: %w", err)`. Return errors rather than logging and continuing, unless at the top level or the parent contains a `*slog.Logger`.
-- Context: pass `context.Context` as the first parameter for anything doing I/O; respect cancellation.
+- Context: pass `context.Context` as the first parameter for I/O that can honour it (the callee accepts a context or deadline); respect cancellation. Don't add a context that is never read.
 - Concurrency: guard shared state with `sync.RWMutex` (or channels). Run tests with `-race`.
 - Interfaces: define them where they're consumed, keep them small. Decorators (caching, metrics) wrap the interface rather than modifying the implementation.
 - Dependencies: prefer the standard library. Ask before adding a new module dependency. Run `go mod tidy` after any dependency change.
