@@ -80,6 +80,9 @@ Runtime configuration options:
   If set, certificates do not have to be valid for a principal matching the local user in addition
   to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
 
+`ca_file`, `authorized_principals` and `authorized_principals_file` require a value (eg. `ca_file=/etc/ssh/ca.pub`).
+If any of them is given without one, authentication fails. Unknown options are logged and ignored.
+
 ## Example configuration
 
 1. The following looks for a certificate on `$SSH_AUTH_SOCK` that has been signed by `/etc/ssh/ca.pub`.

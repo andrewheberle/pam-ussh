@@ -108,6 +108,12 @@ func TestParseArgs(t *testing.T) {
 		{"no requre user", "testuser", []string{"no_require_user_principal"}, false, certauth.Policy{}, defaultUserCA},
 		{"list of authorized_principals", "testuser", []string{"authorized_principals=admin3,admin1,admin2"}, false, certauth.Policy{RequiredPrincipal: "testuser", AuthorizedPrincipals: []string{"admin1", "admin2", "admin3"}}, defaultUserCA},
 		{"missing authorized_principals_file", "testuser", []string{"authorized_principals_file=missing"}, true, certauth.Policy{}, ""},
+		{"ca_file without value", "testuser", []string{"ca_file"}, true, certauth.Policy{}, ""},
+		{"ca_file with empty value", "testuser", []string{"ca_file="}, true, certauth.Policy{}, ""},
+		{"ca_file value containing =", "testuser", []string{"ca_file=/etc/ssh/ca=1.pub"}, false, certauth.Policy{RequiredPrincipal: "testuser"}, "/etc/ssh/ca=1.pub"},
+		{"authorized_principals without value", "testuser", []string{"authorized_principals"}, true, certauth.Policy{}, ""},
+		{"authorized_principals with empty value", "testuser", []string{"authorized_principals="}, true, certauth.Policy{}, ""},
+		{"authorized_principals_file without value", "testuser", []string{"authorized_principals_file"}, true, certauth.Policy{}, ""},
 	}
 
 	for _, tt := range tests {
