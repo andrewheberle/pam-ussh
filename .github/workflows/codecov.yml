@@ -19,22 +19,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
           cache: false
-
-      - name: Install Go dependencies
-        run: go mod download
-
       - name: Install build dependencies
         run: sudo apt-get -qqqy install libpam0g-dev
-
+      - name: Install Go dependencies
+        run: go mod download
       - name: Run Go tests with coverage
         run: go test -coverprofile=coverage.txt ./...
-
       - name: Upload results to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
