@@ -95,7 +95,15 @@ If any of them is given without one, authentication fails. Unknown options are l
 
 ## Logging
 
-The module logs to syslog with the `auth` facility, `warning` priority and the tag `pam-ussh`.
+The module logs to syslog with the `auth` facility and the tag `pam-ussh`. Each line's syslog
+priority matches its level:
+
+| `level` | syslog priority | used for |
+| --- | --- | --- |
+| `INFO` | `info` | successful authentication, `ca_file` in use |
+| `WARN` | `warning` | failed authentication, configuration problems |
+| `ERROR` | `err` | failing to drop or restore privileges, closing files or connections, disabling ptrace |
+
 Each line is a set of `key=value` pairs, for example:
 
 ```
