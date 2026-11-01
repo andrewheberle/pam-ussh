@@ -70,7 +70,7 @@ func TestNoAuthSock(t *testing.T) {
 		panic(err)
 	}
 	logger, logs := newTestLogger()
-	got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "")
+	got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "", defaultAgentTimeout)
 	if got != AuthError {
 		t.Errorf("authenticate(): got %v want %v", got, AuthError)
 	}
@@ -93,7 +93,7 @@ func TestBadAuthSock(t *testing.T) {
 			panic(err)
 		}
 		logger, logs := newTestLogger()
-		got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "")
+		got := authenticate(logger, 0, certauth.Policy{RequiredPrincipal: "r"}, "", defaultAgentTimeout)
 		if got != AuthError {
 			t.Errorf("authenticate(): got %v want %v", got, AuthError)
 		}
@@ -129,7 +129,7 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			policy, userCA, err := parseArgs(slog.New(slog.DiscardHandler), tt.username, tt.args)
+			policy, userCA, _, err := parseArgs(slog.New(slog.DiscardHandler), tt.username, tt.args)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("succeeded unexpectedly")
@@ -315,4 +315,106 @@ func WithSSHAgent(fn func(agent.Agent)) {
 
 		fn(a)
 	})
+}
+
+func TestParseArgsAgentTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"default", []string{}, defaultAgentTimeout, false},
+		{"seconds", []string{"agent_timeout=5s"}, 5 * time.Second, false},
+		{"compound duration", []string{"agent_timeout=1m30s"}, 90 * time.Second, false},
+		{"zero disables", []string{"agent_timeout=0"}, 0, false},
+		{"last wins", []string{"agent_timeout=5s", "agent_timeout=10s"}, 10 * time.Second, false},
+		{"without value", []string{"agent_timeout"}, 0, true},
+		{"empty value", []string{"agent_timeout="}, 0, true},
+		{"not a duration", []string{"agent_timeout=soon"}, 0, true},
+		{"missing unit", []string{"agent_timeout=30"}, 0, true},
+		{"negative", []string{"agent_timeout=-1s"}, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, got, err := parseArgs(slog.New(slog.DiscardHandler), "testuser", tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("succeeded unexpectedly")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("failed unexpectedly: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("agent timeout got %v want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAgentTimeout checks that an agent which accepts the connection but
+// never replies doesn't block authentication beyond the agent timeout.
+func TestAgentTimeout(t *testing.T) {
+	dir := t.TempDir()
+
+	ca := path.Join(dir, "ca")
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := ssh.NewPublicKey(&k.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ca, ssh.MarshalAuthorizedKey(pub), 0444); err != nil {
+		t.Fatal(err)
+	}
+
+	sock := path.Join(dir, "agent")
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+
+	// accept connections and hold them open without replying
+	done := make(chan struct{})
+	t.Cleanup(func() { close(done) })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				<-done
+				_ = c.Close()
+			}()
+		}
+	}()
+
+	t.Setenv("SSH_AUTH_SOCK", sock)
+
+	logger, logs := newTestLogger()
+	result := make(chan AuthResult, 1)
+	go func() {
+		result <- authenticate(logger, getUID(), certauth.Policy{RequiredPrincipal: "foober"}, ca, 100*time.Millisecond)
+	}()
+
+	select {
+	case got := <-result:
+		if got != AuthError {
+			t.Errorf("authenticate(): got %v want %v", got, AuthError)
+		}
+		for _, want := range []string{`msg="authentication failed"`, "i/o timeout"} {
+			if !strings.Contains(logs.String(), want) {
+				t.Errorf("logs %q do not contain %q", logs.String(), want)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("authenticate() did not return within 5s of a 100ms agent timeout")
+	}
 }

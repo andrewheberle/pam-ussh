@@ -84,7 +84,12 @@ Runtime configuration options:
   If set, certificates do not have to be valid for a principal matching the local user in addition
   to one of the principals listed in `authorized_principals` or `authorized_principals_file`.
 
-`ca_file`, `authorized_principals` and `authorized_principals_file` require a value (eg. `ca_file=/etc/ssh/ca.pub`).
+* `agent_timeout` - duration, how long to wait for the ssh-agent, default `30s`.
+  A Go duration such as `10s` or `1m30s`; `0` waits indefinitely. This covers the whole exchange
+  with the agent, including waiting for a touch on a hardware key. If the agent doesn't respond in
+  time, authentication fails.
+
+`ca_file`, `authorized_principals`, `authorized_principals_file` and `agent_timeout` require a value (eg. `ca_file=/etc/ssh/ca.pub`).
 If any of them is given without one, authentication fails. Unknown options are logged and ignored.
 
 ## Logging

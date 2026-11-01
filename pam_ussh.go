@@ -37,6 +37,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/andrewheberle/pam-ussh/internal/certauth"
 	"golang.org/x/crypto/ssh/agent"
@@ -44,6 +45,9 @@ import (
 
 var (
 	defaultUserCA = "/etc/ssh/ca.pub"
+	// defaultAgentTimeout bounds the whole exchange with the ssh-agent; long
+	// enough for a hardware key that waits for a touch.
+	defaultAgentTimeout = 30 * time.Second
 )
 
 // AuthResult is the result of the authentcate function.
@@ -79,7 +83,8 @@ func newLogger() (*slog.Logger, func()) {
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
-func authenticate(logger *slog.Logger, uid int, policy certauth.Policy, ca string) AuthResult {
+// A non-zero agentTimeout is a deadline for the whole exchange with the agent.
+func authenticate(logger *slog.Logger, uid int, policy certauth.Policy, ca string, agentTimeout time.Duration) AuthResult {
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
 		logger.Warn("no SSH_AUTH_SOCK")
@@ -111,6 +116,13 @@ func authenticate(logger *slog.Logger, uid int, policy certauth.Policy, ca strin
 			logger.Error("closing agent connection failed", "err", err)
 		}
 	}()
+
+	if agentTimeout > 0 {
+		if err := conn.SetDeadline(time.Now().Add(agentTimeout)); err != nil {
+			logger.Warn("setting agent deadline failed", "err", err)
+			return AuthError
+		}
+	}
 
 	caBytes, err := os.ReadFile(ca)
 	if err != nil {
@@ -147,19 +159,20 @@ func loadValidPrincipals(logger *slog.Logger, principals string) (map[string]str
 	return p, nil
 }
 
-func parseArgs(logger *slog.Logger, username string, argv []string) (policy certauth.Policy, userCA string, err error) {
+func parseArgs(logger *slog.Logger, username string, argv []string) (policy certauth.Policy, userCA string, agentTimeout time.Duration, err error) {
 	userCA = defaultUserCA
+	agentTimeout = defaultAgentTimeout
 	authorizedPrincipals := make(map[string]struct{})
 	requiredPrincipal := username
 
 	for _, arg := range argv {
 		name, value, _ := strings.Cut(arg, "=")
 		switch name {
-		case "ca_file", "authorized_principals", "authorized_principals_file":
+		case "ca_file", "authorized_principals", "authorized_principals_file", "agent_timeout":
 			// these options require a value; fail closed rather than guess
 			if value == "" {
 				logger.Warn("option requires a value", "option", name)
-				return certauth.Policy{}, "", fmt.Errorf("option %s requires a value", name)
+				return certauth.Policy{}, "", 0, fmt.Errorf("option %s requires a value", name)
 			}
 		}
 
@@ -177,9 +190,16 @@ func parseArgs(logger *slog.Logger, username string, argv []string) (policy cert
 			ap, err := loadValidPrincipals(logger, value)
 			if err != nil {
 				logger.Warn("could not load authorized_principals_file", "path", value, "err", err)
-				return certauth.Policy{}, "", errors.New("could not load authorized_principals_file")
+				return certauth.Policy{}, "", 0, errors.New("could not load authorized_principals_file")
 			}
 			authorizedPrincipals = ap
+		case "agent_timeout":
+			d, err := time.ParseDuration(value)
+			if err != nil || d < 0 {
+				logger.Warn("invalid agent_timeout", "option", name, "value", value)
+				return certauth.Policy{}, "", 0, fmt.Errorf("invalid agent_timeout %q", value)
+			}
+			agentTimeout = d
 		case "no_require_user_principal":
 			requiredPrincipal = ""
 		default:
@@ -192,7 +212,7 @@ func parseArgs(logger *slog.Logger, username string, argv []string) (policy cert
 		AuthorizedPrincipals: slices.Sorted(maps.Keys(authorizedPrincipals)),
 	}
 
-	return policy, userCA, nil
+	return policy, userCA, agentTimeout, nil
 }
 
 func pamAuthenticate(logger *slog.Logger, uid int, username string, argv []string) AuthResult {
@@ -201,12 +221,12 @@ func pamAuthenticate(logger *slog.Logger, uid int, username string, argv []strin
 	logger = logger.With("user", username, "uid", uid)
 
 	// parse args
-	policy, userCA, err := parseArgs(logger, username, argv)
+	policy, userCA, agentTimeout, err := parseArgs(logger, username, argv)
 	if err != nil {
 		return AuthError
 	}
 
-	return authenticate(logger, uid, policy, userCA)
+	return authenticate(logger, uid, policy, userCA, agentTimeout)
 }
 
 func main() {}
