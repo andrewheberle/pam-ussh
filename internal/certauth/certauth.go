@@ -123,30 +123,10 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 			continue
 		}
 
-		certValidFor := ""
-		// Optionally, we may require that the cert be valid for a
-		// required principal, typically the local username
-		if len(policy.RequiredPrincipal) > 0 {
-			if err := c.CheckCert(policy.RequiredPrincipal, cert); err != nil {
-				rejections = append(rejections, fmt.Errorf("certificate %q: required principal %q: %w: %w", cert.KeyId, policy.RequiredPrincipal, ErrPrincipalMismatch, err))
-				continue
-			}
-			certValidFor = policy.RequiredPrincipal
-		}
-
-		// If authorized principals are set, the cert must be valid for at least one of them
-		if len(authorized) > 0 {
-			for _, p := range policy.AuthorizedPrincipals {
-				if err := c.CheckCert(p, cert); err != nil {
-					continue
-				}
-				certValidFor = p
-				break
-			}
-			if len(certValidFor) == 0 {
-				rejections = append(rejections, fmt.Errorf("certificate %q: %w", cert.KeyId, ErrPrincipalMismatch))
-				continue
-			}
+		principal, err := matchPrincipal(c, policy.RequiredPrincipal, authorized, cert)
+		if err != nil {
+			rejections = append(rejections, fmt.Errorf("certificate %q: %w", cert.KeyId, err))
+			continue
 		}
 
 		if !c.IsUserAuthority(cert.SignatureKey) {
@@ -170,22 +150,48 @@ func Verify(policy Policy, caKeys []byte, a agent.Agent) (Match, error) {
 			return Match{}, fmt.Errorf("certificate %q: %w: verifying signature: %w", cert.KeyId, ErrProofFailed, err)
 		}
 
-		if len(authorized) == 0 {
-			return Match{KeyID: cert.KeyId, Serial: cert.Serial, Principal: certValidFor}, nil
-		}
-
-		for _, p := range cert.ValidPrincipals {
-			if _, ok := authorized[p]; ok {
-				return Match{KeyID: cert.KeyId, Serial: cert.Serial, Principal: p}, nil
-			}
-		}
-		rejections = append(rejections, fmt.Errorf("certificate %q: %w", cert.KeyId, ErrPrincipalMismatch))
+		return Match{KeyID: cert.KeyId, Serial: cert.Serial, Principal: principal}, nil
 	}
 
 	if len(rejections) == 0 {
 		return Match{}, ErrNoCertificates
 	}
 	return Match{}, fmt.Errorf("no valid certificates: %w", errors.Join(rejections...))
+}
+
+// matchPrincipal checks cert against the required principal (if set) and the
+// authorized principals (if any), returning the principal it matched: the
+// first of the cert's principals that is authorized, otherwise the required
+// principal.
+//
+// CheckCert also enforces the validity window, critical options and the CA
+// signature, so it runs at least once for every cert that is accepted.
+func matchPrincipal(c *ssh.CertChecker, required string, authorized map[string]struct{}, cert *ssh.Certificate) (string, error) {
+	// Optionally, we may require that the cert be valid for a
+	// required principal, typically the local username
+	if len(required) > 0 {
+		if err := c.CheckCert(required, cert); err != nil {
+			return "", fmt.Errorf("required principal %q: %w: %w", required, ErrPrincipalMismatch, err)
+		}
+		if len(authorized) == 0 {
+			return required, nil
+		}
+	}
+
+	// The cert must carry at least one authorized principal
+	for _, p := range cert.ValidPrincipals {
+		if _, ok := authorized[p]; !ok {
+			continue
+		}
+		if len(required) == 0 {
+			if err := c.CheckCert(p, cert); err != nil {
+				return "", fmt.Errorf("authorized principal %q: %w: %w", p, ErrPrincipalMismatch, err)
+			}
+		}
+		return p, nil
+	}
+
+	return "", ErrPrincipalMismatch
 }
 
 // parseCAKeys returns the public keys in b, skipping any that fail to parse.
