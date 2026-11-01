@@ -29,6 +29,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"log/syslog"
 	"maps"
 	"net"
@@ -55,20 +56,33 @@ const (
 	AuthSuccess
 )
 
-func pamLog(format string, args ...interface{}) {
-	l, err := syslog.New(syslog.LOG_AUTH|syslog.LOG_WARNING, "pam-ussh")
+// newLogger returns a logger writing to syslog and a func that closes the
+// syslog connection. If syslog can't be opened, log records are discarded.
+func newLogger() (*slog.Logger, func()) {
+	w, err := syslog.New(syslog.LOG_AUTH|syslog.LOG_WARNING, "pam-ussh")
 	if err != nil {
-		return
+		return slog.New(slog.DiscardHandler), func() {}
 	}
-	_ = l.Warning(fmt.Sprintf(format, args...))
+
+	h := slog.NewTextHandler(w, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// syslog adds its own timestamp
+			if len(groups) == 0 && a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+
+	return slog.New(h), func() { _ = w.Close() }
 }
 
 // authenticate validates certs loaded on the ssh-agent at the other end of
 // AuthSock.
-func authenticate(uid int, policy certauth.Policy, ca string) AuthResult {
+func authenticate(logger *slog.Logger, uid int, policy certauth.Policy, ca string) AuthResult {
 	authSock := os.Getenv("SSH_AUTH_SOCK")
 	if authSock == "" {
-		pamLog("no SSH_AUTH_SOCK")
+		logger.Warn("no SSH_AUTH_SOCK")
 		return AuthError
 	}
 
@@ -77,51 +91,51 @@ func authenticate(uid int, policy certauth.Policy, ca string) AuthResult {
 		// Note: this only sets the euid and doesn't do anything with the egid.
 		// That should be fine for most cases, but it's worth calling out.
 		if !seteuid(uid) {
-			pamLog("error dropping privs from %d to %d", origEUID, uid)
+			logger.Error("dropping privileges failed", "euid", origEUID)
 			return AuthError
 		}
 		defer func() {
 			if !seteuid(origEUID) {
-				pamLog("error resetting uid to %d", origEUID)
+				logger.Error("restoring privileges failed", "euid", origEUID)
 			}
 		}()
 	}
 
 	conn, err := net.Dial("unix", authSock)
 	if err != nil {
-		pamLog("error: %v", err)
+		logger.Warn("connecting to agent failed", "err", err)
 		return AuthError
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			pamLog("error closing agent conn: %v", err)
+			logger.Error("closing agent connection failed", "err", err)
 		}
 	}()
 
 	caBytes, err := os.ReadFile(ca)
 	if err != nil {
-		pamLog("error reading ca: %v", err)
+		logger.Warn("reading CA file failed", "ca_file", ca, "err", err)
 		return AuthError
 	}
 
 	match, err := certauth.Verify(policy, caBytes, agent.NewClient(conn))
 	if err != nil {
-		pamLog("authentication failed: %v", err)
+		logger.Warn("authentication failed", "err", err)
 		return AuthError
 	}
 
-	pamLog("authentication succeeded for %q (cert %q, %d)", match.Principal, match.KeyID, match.Serial)
+	logger.Info("authentication succeeded", "principal", match.Principal, "key_id", match.KeyID, "serial", match.Serial)
 	return AuthSuccess
 }
 
-func loadValidPrincipals(principals string) (map[string]struct{}, error) {
+func loadValidPrincipals(logger *slog.Logger, principals string) (map[string]struct{}, error) {
 	f, err := os.Open(principals)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			pamLog("problem closing principals file: %v", err)
+			logger.Error("closing principals file failed", "path", principals, "err", err)
 		}
 	}()
 
@@ -133,7 +147,7 @@ func loadValidPrincipals(principals string) (map[string]struct{}, error) {
 	return p, nil
 }
 
-func parseArgs(username string, argv []string) (policy certauth.Policy, userCA string, err error) {
+func parseArgs(logger *slog.Logger, username string, argv []string) (policy certauth.Policy, userCA string, err error) {
 	userCA = defaultUserCA
 	authorizedPrincipals := make(map[string]struct{})
 	requiredPrincipal := username
@@ -144,7 +158,7 @@ func parseArgs(username string, argv []string) (policy certauth.Policy, userCA s
 		case "ca_file", "authorized_principals", "authorized_principals_file":
 			// these options require a value; fail closed rather than guess
 			if value == "" {
-				pamLog("option %s requires a value", name)
+				logger.Warn("option requires a value", "option", name)
 				return certauth.Policy{}, "", fmt.Errorf("option %s requires a value", name)
 			}
 		}
@@ -152,24 +166,24 @@ func parseArgs(username string, argv []string) (policy certauth.Policy, userCA s
 		switch name {
 		case "ca_file":
 			userCA = value
-			pamLog("ca_file set to %s", userCA)
+			logger.Info("ca_file set", "ca_file", userCA)
 		case "group":
-			pamLog("the group option is deprecated and is ignored")
+			logger.Warn("deprecated option ignored", "option", name)
 		case "authorized_principals":
 			for _, s := range strings.Split(value, ",") {
 				authorizedPrincipals[s] = struct{}{}
 			}
 		case "authorized_principals_file":
-			ap, err := loadValidPrincipals(value)
+			ap, err := loadValidPrincipals(logger, value)
 			if err != nil {
-				pamLog("%v", err)
+				logger.Warn("could not load authorized_principals_file", "path", value, "err", err)
 				return certauth.Policy{}, "", errors.New("could not load authorized_principals_file")
 			}
 			authorizedPrincipals = ap
 		case "no_require_user_principal":
 			requiredPrincipal = ""
 		default:
-			pamLog("unknown option: %s", name)
+			logger.Warn("unknown option", "option", name)
 		}
 	}
 
@@ -181,16 +195,18 @@ func parseArgs(username string, argv []string) (policy certauth.Policy, userCA s
 	return policy, userCA, nil
 }
 
-func pamAuthenticate(uid int, username string, argv []string) AuthResult {
+func pamAuthenticate(logger *slog.Logger, uid int, username string, argv []string) AuthResult {
 	runtime.GOMAXPROCS(1)
 
+	logger = logger.With("user", username, "uid", uid)
+
 	// parse args
-	policy, userCA, err := parseArgs(username, argv)
+	policy, userCA, err := parseArgs(logger, username, argv)
 	if err != nil {
 		return AuthError
 	}
 
-	return authenticate(uid, policy, userCA)
+	return authenticate(logger, uid, policy, userCA)
 }
 
 func main() {}
