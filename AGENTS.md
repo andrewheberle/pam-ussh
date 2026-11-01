@@ -45,3 +45,17 @@ Run these before considering any change complete:
 - Don't commit secrets, tokens, or real config values.
 - Don't modify generated files; regenerate them with `go generate ./...`.
 - Keep changes scoped to the task. No drive-by refactors or renames.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on `andrewheberle/pam-ussh` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
