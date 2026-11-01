@@ -160,6 +160,30 @@ func TestVerify(t *testing.T) {
 			wantErr:    ErrPrincipalMismatch,
 		},
 		{
+			name:       "matched principal follows certificate order",
+			policy:     Policy{AuthorizedPrincipals: []string{"group:foober", "foober"}},
+			caKeys:     caKeys,
+			identities: []identity{user},
+			want:       Match{KeyID: "user", Serial: 1, Principal: "foober"},
+		},
+		{
+			name:       "expired certificate with authorized principal",
+			policy:     Policy{AuthorizedPrincipals: []string{"foober"}},
+			caKeys:     caKeys,
+			identities: []identity{expired},
+			wantErr:    ErrPrincipalMismatch,
+		},
+		{
+			// the possession proof isn't attempted for a cert that fails the
+			// principal checks
+			name:       "wrong authorized principal is rejected before possession proof",
+			policy:     Policy{RequiredPrincipal: "foober", AuthorizedPrincipals: []string{"group:boober"}},
+			caKeys:     caKeys,
+			identities: []identity{user},
+			failSign:   true,
+			wantErr:    ErrPrincipalMismatch,
+		},
+		{
 			name:       "wrong CA",
 			policy:     Policy{RequiredPrincipal: "foober"},
 			caKeys:     caKeys,
