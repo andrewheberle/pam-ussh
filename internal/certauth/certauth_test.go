@@ -40,7 +40,9 @@ type identity struct {
 	cert *ssh.Certificate
 }
 
-func newIdentity(t *testing.T, ca ssh.Signer, keyID string, principals []string, validFor time.Duration) identity {
+// newIdentity returns a user certificate signed by ca. Each opt can modify
+// the certificate before it is signed.
+func newIdentity(t *testing.T, ca ssh.Signer, keyID string, principals []string, validFor time.Duration, opts ...func(*ssh.Certificate)) identity {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -59,6 +61,9 @@ func newIdentity(t *testing.T, ca ssh.Signer, keyID string, principals []string,
 		ValidAfter:      uint64(time.Now().Add(-1 * time.Minute).Unix()),
 		ValidBefore:     uint64(time.Now().Add(validFor).Unix()),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
 	if err := c.SignCert(rand.Reader, ca); err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +79,10 @@ func TestVerify(t *testing.T) {
 	other := newIdentity(t, ca, "other", []string{"user", "group:foober"}, time.Minute)
 	wrong := newIdentity(t, wrongCA, "wrong", []string{"foober", "group:foober"}, time.Minute)
 	expired := newIdentity(t, ca, "expired", []string{"foober"}, -30*time.Second)
+	noPrincipals := newIdentity(t, ca, "no-principals", nil, time.Minute)
+	host := newIdentity(t, ca, "host", []string{"foober", "group:foober"}, time.Minute, func(c *ssh.Certificate) {
+		c.CertType = ssh.HostCert
+	})
 
 	_, plainKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -182,6 +191,41 @@ func TestVerify(t *testing.T) {
 			identities: []identity{user},
 			failSign:   true,
 			wantErr:    ErrPrincipalMismatch,
+		},
+		{
+			name:       "certificate without principals",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{noPrincipals},
+			wantErr:    ErrNoPrincipals,
+		},
+		{
+			name:       "certificate without principals and authorized principals",
+			policy:     Policy{AuthorizedPrincipals: []string{"group:foober"}},
+			caKeys:     caKeys,
+			identities: []identity{noPrincipals},
+			wantErr:    ErrNoPrincipals,
+		},
+		{
+			name:       "host certificate",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{host},
+			wantErr:    ErrNotUserCertificate,
+		},
+		{
+			name:       "host certificate and authorized principals",
+			policy:     Policy{RequiredPrincipal: "foober", AuthorizedPrincipals: []string{"group:foober"}},
+			caKeys:     caKeys,
+			identities: []identity{host},
+			wantErr:    ErrNotUserCertificate,
+		},
+		{
+			name:       "rejected host and principal-less certificates then valid certificate",
+			policy:     Policy{RequiredPrincipal: "foober"},
+			caKeys:     caKeys,
+			identities: []identity{host, noPrincipals, user},
+			want:       Match{KeyID: "user", Serial: 1, Principal: "foober"},
 		},
 		{
 			name:       "wrong CA",
